@@ -108,7 +108,7 @@ class Release(models.Model):
         return f"{self.version}"
 
 
-class Stickerpack(models.Model):
+class StickerPack(models.Model):
     name = models.CharField(max_length=255)
     url = models.URLField(unique=True)
     stickers = models.JSONField()
