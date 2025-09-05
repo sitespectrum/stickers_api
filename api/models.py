@@ -35,11 +35,22 @@ ERROR_SEVERITIES = (
 )
 
 
+class StickerPack(models.Model):
+    name = models.CharField(max_length=255)
+    url = models.URLField(unique=True)
+    stickers = models.JSONField()
+
+    def __str__(self):
+        return f"{self.name} ({self.url})"
+
+
 class UserData(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE)
     role = models.CharField(max_length=255, choices=ROLE_CHOICES)
     unsuccessful_attempts = models.IntegerField(default=0)
     is_disabled = models.BooleanField(default=False)
+    favourite_packs = ManyToManyField(to=StickerPack)
+    synced_packs = ManyToManyField(to=StickerPack)
 
     def __str__(self):
         return f"{self.user.username}'s user data"
@@ -106,12 +117,3 @@ class Release(models.Model):
 
     def __str__(self):
         return f"{self.version}"
-
-
-class StickerPack(models.Model):
-    name = models.CharField(max_length=255)
-    url = models.URLField(unique=True)
-    stickers = models.JSONField()
-
-    def __str__(self):
-        return f"{self.name} ({self.url})"
