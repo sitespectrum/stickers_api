@@ -7,7 +7,8 @@ from django.db.models import ManyToManyField, SET_NULL
 # Create your models here.
 ROLE_CHOICES = (
     ("owner", "Owner"),
-    ('admin', 'Admin'),
+    ("admin", "Admin"),
+    ("moderator", "Moderator"),
     ('user', 'User'),
 )
 
@@ -19,19 +20,19 @@ FILE_TYPES = (
 )
 
 ANNOUNCEMENT_TYPES = (
-    ('public', 'Public'),
-    ('service', 'Service'),
-    ('staff', 'Staff (Only visible on the dashboard)'),
+    ("public", "Public"),
+    ("service", "Service"),
+    ("staff", "Staff (Only visible on the dashboard)"),
 )
 
 ERROR_SEVERITIES = (
-    ('critical', 'Critical'),
-    ('database', 'Database Error'),
-    ('high', 'High'),
-    ('medium', 'Medium'),
-    ('low', 'Low'),
-    ('info', 'Information'),
-    ('unknown', 'Unknown')
+    ("critical", "Critical"),
+    ("database", "Database Error"),
+    ("high", "High"),
+    ("medium", "Medium"),
+    ("low", "Low"),
+    ("info", "Information"),
+    ("unknown", "Unknown")
 )
 
 
