@@ -59,8 +59,23 @@ V----------------------------------------------------V
 print(debug if DEBUG else production)
 
 ALLOWED_HOSTS = ["*"]
+# Cookies
+if DEBUG:
+    SESSION_COOKIE_SAMESITE = None   # default Lax
+    SESSION_COOKIE_SECURE = False    # allow HTTP
+    CSRF_COOKIE_SAMESITE = None
+    CSRF_COOKIE_SECURE = False
+else:
+    SESSION_COOKIE_SAMESITE = "None"
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SAMESITE = "None"
+    CSRF_COOKIE_SECURE = True
 
-
+# CORS
+CORS_ALLOWED_ORIGINS = [
+    "http://127.0.0.1:5173",   # frontend origin
+]
+CORS_ALLOW_CREDENTIALS = True
 # Application definition
 
 INSTALLED_APPS = [
@@ -70,11 +85,13 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'corsheaders',
     'api',
     'authenticate',
 ]
 
 MIDDLEWARE = [
+    'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',

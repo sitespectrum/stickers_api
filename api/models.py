@@ -50,7 +50,7 @@ class UserData(models.Model):
     role = models.CharField(max_length=255, choices=ROLE_CHOICES)
     unsuccessful_attempts = models.IntegerField(default=0)
     is_disabled = models.BooleanField(default=False)
-    favourite_packs = ManyToManyField(to=StickerPack)
+    favourite_packs = ManyToManyField(to=StickerPack, related_name="favourite_users")
     synced_packs = ManyToManyField(to=StickerPack)
 
     def __str__(self):

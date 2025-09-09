@@ -1,3 +1,4 @@
+import time
 from datetime import timedelta
 from json import JSONDecodeError
 
@@ -220,6 +221,7 @@ def me(request: WSGIRequest):
         return JsonResponse({"status": "Error"}, status=403)
     user_data = UserData.objects.get(user=request.user)
     return JsonResponse({
+        "username": request.user.username,
         "role": dict(ROLE_CHOICES)[user_data.role],
-        "email": request.user.email,
-    })
+        "email": request.user.email or "no email",
+    }, status=200)
