@@ -47,6 +47,7 @@ class StickerPack(models.Model):
 
 class UserData(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE)
+    display_name = models.CharField(max_length=255, blank=True, null=True)
     role = models.CharField(max_length=255, choices=ROLE_CHOICES)
     unsuccessful_attempts = models.IntegerField(default=0)
     is_disabled = models.BooleanField(default=False)

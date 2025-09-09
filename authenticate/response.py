@@ -139,6 +139,28 @@ def change_password(request: WSGIRequest):
     request.user.set_password(data["password"])
     request.user.save()
 
+    auth_login(request, request.user)
+
+    return JsonResponse({"status": "Ok"}, status=200)
+
+
+@utils.panic_protected()
+@utils.safe_protected()
+@utils.fallback_protected()
+@require_http_methods(["POST"])
+@login_required
+def change_display_name(request: WSGIRequest):
+    try:
+        data = json.loads(request.body)
+    except JSONDecodeError:
+        return JsonResponse({"error": "Invalid request body"}, status=400)
+    if not json.loads(request.body)["display_name"]:
+        return JsonResponse({"error": "Invalid password"}, status=400)
+
+    user_data = UserData.objects.get(user=request.user)
+    user_data.display_name = data["display_name"]
+    user_data.save()
+
     return JsonResponse({"status": "Ok"}, status=200)
 
 
@@ -222,6 +244,7 @@ def me(request: WSGIRequest):
     user_data = UserData.objects.get(user=request.user)
     return JsonResponse({
         "username": request.user.username,
+        "display_name": user_data.display_name,
         "role": dict(ROLE_CHOICES)[user_data.role],
         "email": request.user.email or "no email",
     }, status=200)
