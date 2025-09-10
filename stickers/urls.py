@@ -1,0 +1,8 @@
+from django.urls import path
+from . import response
+
+urlpatterns = [
+    path("add_pack", response.add_sticker_pack, name="add_pack"),
+    path("get_packs", response.get_packs, name="get_packs"),
+    path("get_sticker/<str:type>/<str:file_name>", response.get_sticker, name="get_packs"),
+]

@@ -104,7 +104,7 @@ def register(request: WSGIRequest, invite_code):
 @utils.safe_protected()
 @utils.fallback_protected()
 @require_http_methods(["POST"])
-@login_required
+@wrappers.login_required()
 def change_email(request: WSGIRequest):
     try:
         data = json.loads(request.body)
@@ -127,7 +127,7 @@ def change_email(request: WSGIRequest):
 @utils.safe_protected()
 @utils.fallback_protected()
 @require_http_methods(["POST"])
-@login_required
+@wrappers.login_required()
 def change_password(request: WSGIRequest):
     try:
         data = json.loads(request.body)
@@ -148,7 +148,7 @@ def change_password(request: WSGIRequest):
 @utils.safe_protected()
 @utils.fallback_protected()
 @require_http_methods(["POST"])
-@login_required
+@wrappers.login_required()
 def change_display_name(request: WSGIRequest):
     try:
         data = json.loads(request.body)

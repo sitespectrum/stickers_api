@@ -2,7 +2,11 @@ import datetime
 
 from django.db import models
 from django.contrib.auth.models import User
-from django.db.models import ManyToManyField, SET_NULL
+from django.db.models import ManyToManyField, SET_NULL, OneToOneField
+
+from django.db.models.signals import post_delete
+from django.dispatch import receiver
+
 
 # Create your models here.
 ROLE_CHOICES = (
@@ -36,13 +40,34 @@ ERROR_SEVERITIES = (
 )
 
 
+class Sticker(models.Model):
+    emoji = models.CharField(max_length=255)
+    file_name = models.CharField(max_length=255)
+    is_video = models.BooleanField(default=False)
+    is_animated = models.BooleanField(default=False)
+
+
 class StickerPack(models.Model):
-    name = models.CharField(max_length=255)
-    url = models.URLField(unique=True)
-    stickers = models.JSONField()
+    name = models.CharField(max_length=255, unique=True)
+    title = models.CharField(max_length=255)
+    stickers = ManyToManyField(to=Sticker, related_name="packs")
+    thumbnail = OneToOneField(to=Sticker,related_name="thumbnail_for_pack", on_delete=models.SET_NULL, null=True, blank=True, default=None)
 
     def __str__(self):
-        return f"{self.name} ({self.url})"
+        return f"{self.title} ({self.name})"
+
+
+# Ensure correct cleanup of related objects (stickers and thumbnail) when StickerPack is deleted
+@receiver(post_delete, sender=StickerPack)
+def delete_stickers_on_pack_delete(sender, instance, **kwargs):
+    """
+    Deletes stickers associated with a StickerPack when the StickerPack is deleted.
+    This includes stickers in the `stickers` field and the `thumbnail`.
+    """
+    # Delete the thumbnail if it exists
+    if instance.thumbnail:
+        instance.thumbnail.delete()
+
 
 
 class UserData(models.Model):
@@ -51,8 +76,8 @@ class UserData(models.Model):
     role = models.CharField(max_length=255, choices=ROLE_CHOICES)
     unsuccessful_attempts = models.IntegerField(default=0)
     is_disabled = models.BooleanField(default=False)
-    favourite_packs = ManyToManyField(to=StickerPack, related_name="favourite_users")
-    synced_packs = ManyToManyField(to=StickerPack)
+    favourite_stickers = ManyToManyField(to=Sticker, blank=True)
+    sticker_packs = ManyToManyField(to=StickerPack, blank=True)
 
     def __str__(self):
         return f"{self.user.username}'s user data"

@@ -27,6 +27,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = os.getenv("DJANGO_SECRET")
 PASSWORD_ATTEMPT_LIMIT = os.getenv("PASSWORD_ATTEMPT_LIMIT")
 HCAPTCHA_SECRET = os.getenv("HCAPTCHA_SECRET")
+TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.getenv("DEBUG") == "1"
