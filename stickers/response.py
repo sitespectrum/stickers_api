@@ -138,3 +138,21 @@ def get_sticker(request: WSGIRequest, type: str, file_name: str):
     content_type = mimetypes.guess_type(file_name)
 
     return HttpResponse(file_res.content, content_type=content_type)
+
+@utils.panic_protected()
+@utils.safe_protected()
+@utils.fallback_protected()
+@require_http_methods(["GET"])
+@wrappers.login_required()
+def get_one_pack(request: WSGIRequest, pack_name):
+    if not StickerPack.objects.filter(name=pack_name).exists():
+        return JsonResponse({"error": "Pack not found on our server"}, status=404)
+
+    sticker_pack = StickerPack.objects.get(name=pack_name)
+
+    return JsonResponse({
+        "name": pack_name,
+        "title": sticker_pack.title,
+        "thumbnail": sticker_pack.thumbnail.file_name,
+        "stickers": [i.file_name for i in sticker_pack.stickers.all()]
+    }, status=200)
