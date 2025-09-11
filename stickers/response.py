@@ -50,8 +50,15 @@ def add_sticker_pack(request: WSGIRequest):
             title=data["title"],
         )
 
-        thumbnail_data = requests.get(f"{TELEGRAM_API}/getFile?file_id={data['thumbnail']['file_id']}").json()["result"]
-        print(thumbnail_data)
+        if data.get("thumbnail") is not None:
+            thumbnail_data = requests.get(f"{TELEGRAM_API}/getFile?file_id={data['thumbnail']['file_id']}")
+            thumbnail_data = thumbnail_data.json()["result"]
+        elif data.get("thumb") is not None:
+            thumbnail_data = requests.get(f"{TELEGRAM_API}/getFile?file_id={data['thumb']['file_id']}")
+            thumbnail_data = thumbnail_data.json()["result"]
+        else:
+            thumbnail_data = requests.get(f"{TELEGRAM_API}/getFile?file_id={data["stickers"][0]["thumbnail"]["file_id"]}")
+            thumbnail_data = thumbnail_data.json()["result"]
 
         thumbnail = Sticker.objects.create(
             file_name=thumbnail_data["file_path"],
@@ -150,9 +157,37 @@ def get_one_pack(request: WSGIRequest, pack_name):
 
     sticker_pack = StickerPack.objects.get(name=pack_name)
 
+    sticker_list = []
+    for i in sticker_pack.stickers.all():
+        sticker_list.append({
+            "emoji": i.emoji,
+            "file_name": i.file_name,
+            "is_video": i.is_video,
+            "is_animated": i.is_animated,
+        })
+
     return JsonResponse({
         "name": pack_name,
         "title": sticker_pack.title,
         "thumbnail": sticker_pack.thumbnail.file_name,
-        "stickers": [i.file_name for i in sticker_pack.stickers.all()]
+        "stickers": sticker_list
     }, status=200)
+
+
+@utils.panic_protected()
+@utils.safe_protected()
+@utils.fallback_protected()
+@require_http_methods(["DELETE"])
+@wrappers.login_required()
+def remove_pack(request: WSGIRequest, pack_name):
+    if not StickerPack.objects.filter(name=pack_name).exists():
+        return JsonResponse({"error": "Pack not found on our server"}, status=404)
+
+    user_data = UserData.objects.get(user=request.user)
+
+    if user_data.sticker_packs.filter(name=pack_name).exists():
+        user_data.sticker_packs.remove(StickerPack.objects.get(name=pack_name))
+        user_data.save()
+
+        return JsonResponse({"status": "Ok"}, status=200)
+    return JsonResponse({"error": "Pack not found in your packs"}, status=404)
