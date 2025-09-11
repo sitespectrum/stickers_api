@@ -168,6 +168,34 @@ def change_display_name(request: WSGIRequest):
 @utils.safe_protected()
 @utils.fallback_protected()
 @require_http_methods(["POST"])
+@wrappers.login_required()
+def update_profile(request: WSGIRequest):
+    try:
+        data = json.loads(request.body)
+    except JSONDecodeError:
+        return JsonResponse({"error": "Invalid request body"}, status=400)
+
+    user_data = UserData.objects.get(user=request.user)
+    if "password" in data.keys():
+        request.user.set_password(data["password"])
+        request.user.save()
+        auth_login(request, request.user)
+    if "display_name" in data.keys():
+        user_data.display_name = data["display_name"]
+    if "pfp_link" in data.keys():
+        user_data.pfp_link = data["pfp_link"]
+    if "email" in data.keys():
+        request.user.email = data["email"]
+        request.user.save()
+    user_data.save()
+
+    return JsonResponse({"status": "Ok"}, status=200)
+
+
+@utils.panic_protected()
+@utils.safe_protected()
+@utils.fallback_protected()
+@require_http_methods(["POST"])
 def forgot_password(request: WSGIRequest):
     try:
         data = json.loads(request.body)
@@ -247,4 +275,5 @@ def me(request: WSGIRequest):
         "display_name": user_data.display_name,
         "role": dict(ROLE_CHOICES)[user_data.role],
         "email": request.user.email or "no email",
+        "profile_pic": user_data.pfp_link,
     }, status=200)
