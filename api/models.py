@@ -43,6 +43,8 @@ ERROR_SEVERITIES = (
 class Sticker(models.Model):
     emoji = models.CharField(max_length=255)
     file_name = models.CharField(max_length=255)
+    file_id = models.CharField(max_length=255)
+    unique_file_id = models.CharField(max_length=255)
     is_video = models.BooleanField(default=False)
     is_animated = models.BooleanField(default=False)
 
