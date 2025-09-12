@@ -1,18 +1,13 @@
 import time
-from json import JSONDecodeError
-from pprint import pprint
 import mimetypes
 import asyncio
 
 from django.core.cache import cache
 import httpx
 from asgiref.sync import sync_to_async
-from django.db import IntegrityError
-from django.forms import model_to_dict
-from django.http import JsonResponse, HttpResponse, StreamingHttpResponse, HttpResponseNotFound
+from django.http import JsonResponse, StreamingHttpResponse, HttpResponseNotFound
 from django.views.decorators.http import require_http_methods
 from django.core.handlers.wsgi import WSGIRequest
-from concurrent.futures import ThreadPoolExecutor
 import json
 import requests
 from authenticate import wrappers
@@ -23,6 +18,7 @@ from stickers_backend import utils
 
 TELEGRAM_API = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}"
 TELEGRAM_FILE = f"https://api.telegram.org/file/bot{TELEGRAM_TOKEN}"
+
 
 @utils.panic_protected()
 @utils.safe_protected()
@@ -212,6 +208,7 @@ async def create_stickers_bulk_robust(stickers_info, file_data_list):
     try:
         # Get existing stickers
         file_paths = [data["file_path"] for _, data in valid_pairs]
+        # noinspection PyArgumentList
         existing_dict = {
             s.file_name: s for s in
             await sync_to_async(list)(
@@ -279,6 +276,7 @@ async def get_thumbnail_async(client, data):
         print(f"Thumbnail fetch error: {e}")
 
     return None
+
 
 @utils.panic_protected()
 @utils.safe_protected()
@@ -352,7 +350,6 @@ def get_sticker(request, file_type: str, file_name: str):
         cache.set(cache_key, b"".join(content_chunks), timeout=60*60)  # 1 hour
 
     return response
-
 
 
 @utils.panic_protected()
