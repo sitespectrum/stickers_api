@@ -132,6 +132,27 @@ def create_log(request: WSGIRequest):
 @utils.fallback_protected()
 @login_required
 @wrappers.require_role(["owner"])
+@require_http_methods(["GET"])
+def get_users(request: WSGIRequest):
+    users = User.objects.all()
+    user_list = []
+    for user in users:
+        user_list.append({
+            "id": user.id,
+            "username": user.username,
+            "role": dict(ROLE_CHOICES)[UserData.objects.get(user=user).role],
+        })
+    return JsonResponse({
+        "status": "Ok",
+        "users": user_list
+    }, status=200)
+
+
+@utils.panic_protected()
+@utils.safe_protected()
+@utils.fallback_protected()
+@login_required
+@wrappers.require_role(["owner"])
 @require_http_methods(["POST"])
 def create_user(request: WSGIRequest):
     try:
@@ -179,7 +200,7 @@ def get_roles(request: WSGIRequest):
 @utils.fallback_protected()
 @login_required
 @wrappers.require_role(["owner"])
-@require_http_methods(["POST", "DELETE"])
+@require_http_methods(["POST", "DELETE", "GET"])
 def modify_user(request: WSGIRequest, user_id):
     if not User.objects.filter(id=user_id).exists():
         return JsonResponse({
@@ -196,6 +217,15 @@ def modify_user(request: WSGIRequest, user_id):
         }, status=200)
 
     user_data = UserData.objects.get(user=user_obj)
+
+    if request.method == "GET":
+        return JsonResponse({
+            "status": "Ok",
+            "username": user_obj.username,
+            "role": user_data.role,
+            "display_name": user_data.display_name,
+            "email": user_obj.email,
+        })
 
     try:
         body = json.loads(request.body)

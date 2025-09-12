@@ -30,6 +30,7 @@ HCAPTCHA_SECRET = os.getenv("HCAPTCHA_SECRET")
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 GIT_USERNAME = os.getenv("GIT_USERNAME")
 GIT_PASSWORD = os.getenv("GIT_PASSWORD")
+RESEND_API_KEY = os.getenv("RESEND_API_KEY")
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.getenv("DEBUG") == "1"

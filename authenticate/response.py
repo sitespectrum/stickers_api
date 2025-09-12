@@ -36,7 +36,7 @@ def login(request: WSGIRequest):
     if user is not None:
         user_data = UserData.objects.get(user=user)
         if user_data.is_disabled:
-            return JsonResponse({"error": "Too many unsuccessful attempts. Reset password to continue"}, status=423)
+            return JsonResponse({"error": "Please reset your password using the \"Forgot password\" button"}, status=423)
         auth_login(request, user)
         user_data.unsuccessful_attempts = 0
         user_data.save()
@@ -46,7 +46,7 @@ def login(request: WSGIRequest):
             user = User.objects.get(username=request.POST.get("username"))
             user_data = UserData.objects.get(user=user)
             if user_data.unsuccessful_attempts == PASSWORD_ATTEMPT_LIMIT or user_data.is_disabled:
-                return JsonResponse({"error": "Too many unsuccessful attempts. Reset password to continue"}, status=423)
+                return JsonResponse({"error": "Please reset your password using the \"Forgot password\" button"}, status=423)
             user_data.unsuccessful_attempts += 1
             if user_data.unsuccessful_attempts == PASSWORD_ATTEMPT_LIMIT:
                 user_data.is_disabled = True
