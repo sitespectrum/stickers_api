@@ -277,7 +277,24 @@ def get_sticker(request, sticker_id):
     # Fetch the file from remote server
     file_res = session.get(f"{TELEGRAM_FILE}/{sticker.file_name}", stream=True)
     if file_res.status_code != 200:
-        file_info = session.get(f"{TELEGRAM_API}/getFile?file_id={sticker.file_id}").json()["result"]
+        file_info = session.get(f"{TELEGRAM_API}/getFile?file_id={sticker.file_id}")
+        if file_info.status_code != 200:
+            pack = session.get(f"{TELEGRAM_API}/getStickerSet?name={sticker.packs.all().first().name}")
+            if pack.status_code != 200:
+                return HttpResponseNotFound("Sticker not found")
+            pack = pack.json()["result"]["stickers"]
+            for i in pack:
+                try:
+                    temp_sticker = Sticker.objects.get(unique_file_id=i["file_unique_id"])
+                    if temp_sticker.file_id != i["file_id"]:
+                        temp_sticker.file_id = i["file_id"]
+                        temp_sticker.save(update_fields=["file_id"])
+                except Sticker.DoesNotExist:
+                    continue
+            sticker.refresh_from_db()
+            file_info = session.get(f"{TELEGRAM_API}/getFile?file_id={sticker.file_id}")
+
+        file_info = file_info.json()["result"]
         new_file_path = file_info["file_path"]
         sticker.file_name = new_file_path
         sticker.save()
