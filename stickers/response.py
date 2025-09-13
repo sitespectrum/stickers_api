@@ -374,3 +374,24 @@ def remove_pack(request: WSGIRequest, pack_name):
 
         return JsonResponse({"status": "Ok"}, status=200)
     return JsonResponse({"error": "Pack not found in your packs"}, status=404)
+
+
+@utils.panic_protected()
+@utils.safe_protected()
+@utils.fallback_protected()
+@require_http_methods(["GET"])
+@wrappers.login_required()
+def get_favourite_stickers(request: WSGIRequest):
+    user_data = UserData.objects.get(user=request.user)
+    sticker_list = []
+    for i in user_data.favourite_stickers.all():
+        sticker_list.append({
+            "id": i.id,
+            "emoji": i.emoji,
+            "is_video": i.is_video,
+            "is_animated": i.is_animated,
+        })
+    return JsonResponse({
+        "status": "Ok",
+        "stickers": sticker_list
+    }, status=200)
