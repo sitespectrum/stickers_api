@@ -22,206 +22,123 @@ TELEGRAM_API = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}"
 TELEGRAM_FILE = f"https://api.telegram.org/file/bot{TELEGRAM_TOKEN}"
 
 
+async def fetch_file(client: httpx.AsyncClient, file_id: str):
+    r = await client.get(f"{TELEGRAM_API}/getFile?file_id={file_id}")
+    if r.status_code != 200:
+        return None
+    return r.json()["result"]
+
+
+async def fetch_thumbnail(client: httpx.AsyncClient, data: dict):
+    """
+    Try to extract thumbnail from multiple possible places.
+    """
+    thumb = (
+            data.get("thumbnail")
+            or data.get("thumb")
+            or data.get("stickers")[0].get("thumbnail")
+            or data.get("stickers")[0].get("thumb")
+    )
+    if not thumb:
+        return None
+    r = await client.get(f"{TELEGRAM_API}/getFile?file_id={thumb['file_id']}")
+    if r.status_code != 200:
+        return None
+    return r.json()["result"]
+
+
+async def fetch_all(sticker_list, max_concurrency=50):
+    """
+    Fetch all sticker file info concurrently while preserving order.
+    """
+    limits = httpx.Limits(max_connections=max_concurrency)
+    async with httpx.AsyncClient(timeout=10, limits=limits) as client:
+        tasks = [fetch_file(client, s["file_id"]) for s in sticker_list]
+        results = await asyncio.gather(*tasks)
+        return results
+
+
 @utils.panic_protected()
 @utils.safe_protected()
 @utils.fallback_protected()
 @require_http_methods(["POST"])
 @wrappers.login_required()
 def add_sticker_pack(request: WSGIRequest):
-    async def inner():
-        body = _parse_request_body(request)
-        if isinstance(body, JsonResponse):
-            return body
-
-        pack_name = body.get("pack_name", "").split("/")[-1]
-        if not pack_name:
-            return JsonResponse({"error": "Missing pack_name"}, status=400)
-
-        user_data = await sync_to_async(UserData.objects.get)(user=request.user)
-        pack = await sync_to_async(StickerPack.objects.filter(name=pack_name).first)()
-
-        if not pack:
-            start_time = time.time()
-            pack = await _create_pack_from_telegram(pack_name)
-            if not pack:
-                return JsonResponse({"error": "Pack not found"}, status=404)
-
-            await sync_to_async(user_data.sticker_packs.add)(pack)
-            await sync_to_async(pack.save)()
-            print(f"Pack processing completed in {time.time() - start_time:.2f} seconds")
-        else:
-            await sync_to_async(user_data.sticker_packs.add)(pack)
-
-        await sync_to_async(user_data.save)()
-        return JsonResponse({"status": "Ok"}, status=200)
-
-    return asyncio.run(inner())
-
-
-# -----------------------
-# Helpers
-# -----------------------
-
-def _parse_request_body(request):
+    # Parse body
     try:
-        return json.loads(request.body)
+        body = json.loads(request.body)
     except json.JSONDecodeError:
         return JsonResponse({"error": "Invalid request body"}, status=400)
 
-
-def _http_client():
-    timeout = httpx.Timeout(connect=5.0, read=10.0, write=5.0, pool=10.0)
-    limits = httpx.Limits(max_keepalive_connections=30, max_connections=50)
-    return httpx.AsyncClient(timeout=timeout, limits=limits)
-
-
-# noinspection PyUnresolvedReferences
-async def _create_pack_from_telegram(pack_name: str):
-    async with _http_client() as client:
-        try:
-            res = await client.get(f"{TELEGRAM_API}/getStickerSet?name={pack_name}")
-            data = res.json()
-            if not data.get("ok"):
-                return None
-            data = data["result"]
-        except Exception as e:
-            print(f"Failed to fetch pack: {e}")
-            return None
-
-        pack = await sync_to_async(StickerPack.objects.create)(
-            name=data["name"], title=data["title"]
-        )
-
-        stickers_task = fetch_stickers_with_retries(client, data["stickers"])
-        thumb_task = get_thumbnail_async(client, data)
-        sticker_results, thumbnail = await asyncio.gather(stickers_task, thumb_task)
-
-        sticker_objects = await create_stickers_bulk_robust(data["stickers"], sticker_results)
-        if sticker_objects:
-            await sync_to_async(pack.stickers.set)(sticker_objects)
-
-        if thumbnail:
-            thumb_obj = await sync_to_async(Sticker.objects.create)(
-                file_name=thumbnail["file_path"],
-                file_id=thumbnail["file_id"],
-                unique_file_id=thumbnail["file_unique_id"],
-                is_video=False,
-                is_animated=False,
-            )
-            pack.thumbnail = thumb_obj
-
-        return pack
-
-
-# -----------------------
-# Generic Retry Helper
-# -----------------------
-
-async def retry(coro_func, *args, retries=2, delay=0.5, backoff=2, **kwargs):
-    """Retry coroutine on failure with exponential backoff."""
-    for attempt in range(retries + 1):
-        try:
-            return await coro_func(*args, **kwargs)
-        except Exception as e:
-            if attempt == retries:
-                print(f"Failed after {retries+1} attempts: {e}")
-                return None
-            await asyncio.sleep(delay * (backoff ** attempt))
-
-
-# -----------------------
-# Sticker Helpers
-# -----------------------
-
-async def fetch_stickers_with_retries(client, stickers, max_concurrent=30):
-    """Fetch sticker metadata with concurrency + retries."""
-    semaphore = asyncio.Semaphore(max_concurrent)
-
-    async def fetch_one(sticker):
-        async with semaphore:
-            file_id = sticker["file_id"]
-
-            async def get_file():
-                resp = await client.get(f"{TELEGRAM_API}/getFile?file_id={file_id}", timeout=8.0)
-                data = resp.json()
-                if resp.status_code == 200 and data.get("ok"):
-                    return data["result"]
-                raise Exception(f"Telegram API error {resp.status_code}: {data}")
-
-            return await retry(get_file)
-
-    results = await asyncio.gather(*(fetch_one(s) for s in stickers))
-    return results
-
-
-# noinspection PyArgumentList
-async def create_stickers_bulk_robust(stickers_info, file_data_list):
-    """Create or update stickers in bulk, skipping failures."""
-    valid = [(i, d) for i, d in zip(stickers_info, file_data_list) if d]
-    if not valid:
-        return []
-
-    unique_ids = [i["file_unique_id"] for i, _ in valid]
-    existing = {
-        s.unique_file_id: s
-        for s in await sync_to_async(list)(
-            Sticker.objects.filter(unique_file_id__in=unique_ids)
-        )
-    }
-
-    new_stickers, result = [], []
-    for info, data in valid:
-        unique_id = info["file_unique_id"]
-        if unique_id in existing:
-            sticker = existing[unique_id]
-            if sticker.file_id != info["file_id"]:
-                sticker.file_id = info["file_id"]
-                await sync_to_async(sticker.save)()
-            result.append(sticker)
-        else:
-            new = Sticker(
-                emoji=info.get("emoji", ""),
-                file_name=data["file_path"],
-                file_id=info["file_id"],
-                unique_file_id=unique_id,
-                is_video=info.get("is_video", False),
-                is_animated=info.get("is_animated", False),
-            )
-            new_stickers.append(new)
-            result.append(new)
-
-    if new_stickers:
-        await sync_to_async(Sticker.objects.bulk_create)(new_stickers)
-
-    return result
-
-
-async def get_thumbnail_async(client, data):
-    """Fetch thumbnail metadata from Telegram API."""
     try:
-        file_id = (
-                data.get("thumbnail", {}).get("file_id")
-                or data.get("thumb", {}).get("file_id")
-                or (data["stickers"][0].get("thumbnail", {}).get("file_id") if data.get("stickers") else None)
-        )
-        if not file_id:
-            return None
+        pack_name = body["pack_name"].split("/")[-1]
+    except KeyError:
+        return JsonResponse({"error": "Missing pack_name"}, status=400)
 
-        async def get_thumb():
-            resp = await client.get(f"{TELEGRAM_API}/getFile?file_id={file_id}", timeout=5.0)
-            result = resp.json()
-            if resp.status_code == 200 and result.get("ok"):
-                return {
-                    **result["result"],
-                    "file_id": file_id,
-                    "file_unique_id": data.get("thumbnail", {}).get("file_unique_id", file_id),
-                }
-            raise Exception(f"Thumb fetch error {resp.status_code}: {result}")
+    user_data = UserData.objects.get(user=request.user)
 
-        return await retry(get_thumb, retries=1)
-    except Exception as e:
-        print(f"Thumbnail fetch error: {e}")
-        return None
+    # Already exists?
+    if StickerPack.objects.filter(name=pack_name).exists():
+        user_data.sticker_packs.add(StickerPack.objects.get(name=pack_name))
+        return JsonResponse({"status": "Ok"}, status=200)
+
+    # Get pack info from Telegram
+    r = httpx.get(f"{TELEGRAM_API}/getStickerSet?name={body['pack_name']}", timeout=10)
+    if r.status_code != 200:
+        return JsonResponse({"error": "Pack not found"}, status=404)
+    data = r.json()["result"]
+
+    # Run async thumbnail + sticker fetch concurrently
+    async def gather_all():
+        async with httpx.AsyncClient(timeout=10) as client:
+            thumb_task = fetch_thumbnail(client, data)
+            stickers_task = fetch_all(data["stickers"])
+            thumb_result, stickers_result = await asyncio.gather(thumb_task, stickers_task)
+            return thumb_result, stickers_result
+
+    thumb_data, stickers = asyncio.run(gather_all())
+
+    if not thumb_data:
+        return JsonResponse({"error": "Pack thumbnail not found"}, status=404)
+
+    # Create StickerPack
+    sticker_pack_obj = StickerPack.objects.create(
+        name=data["name"], title=data["title"]
+    )
+
+    # Create thumbnail Sticker
+    thumb_obj = Sticker.objects.create(
+        emoji="",
+        file_name=thumb_data["file_path"],
+        file_id=thumb_data["file_id"],
+        unique_file_id=thumb_data["file_unique_id"],
+        is_video=False,
+        is_animated=False,
+    )
+    sticker_pack_obj.thumbnail = thumb_obj
+
+    # Bulk create stickers (preserving order)
+    sticker_objs = []
+    for sticker in stickers:
+        if not sticker:
+            continue
+        sticker_objs.append(Sticker(
+            emoji=sticker.get("emoji", ""),
+            file_name=sticker["file_path"],
+            file_id=sticker["file_id"],
+            unique_file_id=sticker["file_unique_id"],
+            is_video=sticker.get("is_video", False),
+            is_animated=sticker.get("is_animated", False),
+        ))
+
+    Sticker.objects.bulk_create(sticker_objs)
+    sticker_pack_obj.stickers.add(*sticker_objs)
+
+    sticker_pack_obj.save()
+    user_data.sticker_packs.add(sticker_pack_obj)
+    user_data.save()
+
+    return JsonResponse({"status": "Ok"}, status=200)
 
 
 @utils.panic_protected()
@@ -231,7 +148,7 @@ async def get_thumbnail_async(client, data):
 @wrappers.login_required()
 def get_packs(request: WSGIRequest):
     user_data = UserData.objects.get(user=request.user)
-    packs = user_data.sticker_packs
+    packs = user_data.sticker_packs.order_by("title")
     pack_list = []
     for i in packs.all():
         pack_list.append({
@@ -379,19 +296,34 @@ def remove_pack(request: WSGIRequest, pack_name):
 @utils.panic_protected()
 @utils.safe_protected()
 @utils.fallback_protected()
-@require_http_methods(["GET"])
+@require_http_methods(["GET", "POST"])
 @wrappers.login_required()
-def get_favourite_stickers(request: WSGIRequest):
+def favourite_stickers(request: WSGIRequest):
+    if request.method == "GET":
+        user_data = UserData.objects.get(user=request.user)
+        sticker_list = []
+        for i in user_data.favourite_stickers.all():
+            sticker_list.append({
+                "id": i.id,
+                "emoji": i.emoji,
+                "is_video": i.is_video,
+                "is_animated": i.is_animated,
+            })
+        return JsonResponse({
+            "status": "Ok",
+            "stickers": sticker_list
+        }, status=200)
+    try:
+        body = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid request body"}, status=400)
+    sticker_id = body.get("sticker_id")
+    if not sticker_id:
+        return JsonResponse({"error": "Missing sticker_id"}, status=400)
     user_data = UserData.objects.get(user=request.user)
-    sticker_list = []
-    for i in user_data.favourite_stickers.all():
-        sticker_list.append({
-            "id": i.id,
-            "emoji": i.emoji,
-            "is_video": i.is_video,
-            "is_animated": i.is_animated,
-        })
-    return JsonResponse({
-        "status": "Ok",
-        "stickers": sticker_list
-    }, status=200)
+    if user_data.favourite_stickers.filter(id=sticker_id).exists():
+        user_data.favourite_stickers.remove(Sticker.objects.get(id=sticker_id))
+    else:
+        user_data.favourite_stickers.add(Sticker.objects.get(id=sticker_id))
+    user_data.save()
+    return JsonResponse({"status": "Ok"}, status=200)
