@@ -1,10 +1,8 @@
-import time
 import mimetypes
 import asyncio
 
 from django.core.cache import cache
 import httpx
-from asgiref.sync import sync_to_async
 from django.http import JsonResponse, StreamingHttpResponse, HttpResponseNotFound
 from django.views.decorators.http import require_http_methods
 from django.core.handlers.wsgi import WSGIRequest
@@ -48,42 +46,54 @@ async def fetch_thumbnail(client: httpx.AsyncClient, data: dict):
 
 
 async def fetch_all(sticker_list, max_concurrency=50):
-    """
-    Fetch all sticker file info concurrently while preserving order.
-    """
     limits = httpx.Limits(max_connections=max_concurrency)
     async with httpx.AsyncClient(timeout=10, limits=limits) as client:
-        tasks = [fetch_file(client, s["file_id"]) for s in sticker_list]
+        tasks = [
+            _fetch_sticker_with_file(client, s) for s in sticker_list
+        ]
         results = await asyncio.gather(*tasks)
         return results
+
+
+async def _fetch_sticker_with_file(client, sticker):
+    file_data = await fetch_file(client, sticker["file_id"])
+    if not file_data:
+        return None
+    # Merge original sticker fields with file data
+    return {**sticker, **file_data}
 
 
 @utils.panic_protected()
 @utils.safe_protected()
 @utils.fallback_protected()
-@require_http_methods(["POST"])
-@wrappers.login_required()
-def add_sticker_pack(request: WSGIRequest):
+def add_sticker_pack(request: WSGIRequest, pack_name: str = None,):
     # Parse body
+    if not pack_name and request.method != "POST":
+        return JsonResponse({"error": "Method not allowed"}, status=405)
     try:
         body = json.loads(request.body)
     except json.JSONDecodeError:
         return JsonResponse({"error": "Invalid request body"}, status=400)
 
-    try:
-        pack_name = body["pack_name"].split("/")[-1]
-    except KeyError:
+    # Safely extract pack_name: prefer body value if present, fallback to argument
+    body_pack_name = body.get("pack_name")
+    if body_pack_name:
+        pack_name = body_pack_name.split("/")[-1]
+    if not pack_name:
         return JsonResponse({"error": "Missing pack_name"}, status=400)
 
-    user_data = UserData.objects.get(user=request.user)
+    user_data = None
+    if request.user.is_authenticated:
+        user_data = UserData.objects.get(user=request.user)
 
     # Already exists?
     if StickerPack.objects.filter(name=pack_name).exists():
-        user_data.sticker_packs.add(StickerPack.objects.get(name=pack_name))
+        if request.user.is_authenticated:
+            user_data.sticker_packs.add(StickerPack.objects.get(name=pack_name))
         return JsonResponse({"status": "Ok"}, status=200)
 
     # Get pack info from Telegram
-    r = httpx.get(f"{TELEGRAM_API}/getStickerSet?name={body['pack_name']}", timeout=10)
+    r = httpx.get(f"{TELEGRAM_API}/getStickerSet?name={pack_name}", timeout=10)
     if r.status_code != 200:
         return JsonResponse({"error": "Pack not found"}, status=404)
     data = r.json()["result"]
@@ -135,8 +145,9 @@ def add_sticker_pack(request: WSGIRequest):
     sticker_pack_obj.stickers.add(*sticker_objs)
 
     sticker_pack_obj.save()
-    user_data.sticker_packs.add(sticker_pack_obj)
-    user_data.save()
+    if request.user.is_authenticated:
+        user_data.sticker_packs.add(sticker_pack_obj)
+        user_data.save()
 
     return JsonResponse({"status": "Ok"}, status=200)
 
@@ -145,10 +156,22 @@ def add_sticker_pack(request: WSGIRequest):
 @utils.safe_protected()
 @utils.fallback_protected()
 @require_http_methods(["GET"])
-@wrappers.login_required()
 def get_packs(request: WSGIRequest):
-    user_data = UserData.objects.get(user=request.user)
-    packs = user_data.sticker_packs.order_by("title")
+    if request.user.is_authenticated:
+        user_data = UserData.objects.get(user=request.user)
+        packs = user_data.sticker_packs.order_by("title")
+        pack_list = []
+        for i in packs.all():
+            pack_list.append({
+                "name": i.name,
+                "title": i.title,
+                "thumbnail_id": i.thumbnail.id,
+            })
+        return JsonResponse({
+            "packs": pack_list
+        }, status=200)
+
+    packs = StickerPack.objects.all().order_by("title")
     pack_list = []
     for i in packs.all():
         pack_list.append({
@@ -169,7 +192,6 @@ session = requests.Session()
 @utils.safe_protected()
 @utils.fallback_protected()
 @require_http_methods(["GET"])
-@wrappers.login_required()
 def get_sticker(request, sticker_id):
     if not Sticker.objects.filter(id=sticker_id).exists():
         return JsonResponse({"error": "Sticker not found on our server"}, status=404)
@@ -250,12 +272,18 @@ def get_sticker(request, sticker_id):
 @utils.safe_protected()
 @utils.fallback_protected()
 @require_http_methods(["GET"])
-@wrappers.login_required()
 def get_one_pack(request: WSGIRequest, pack_name):
-    if not StickerPack.objects.filter(name=pack_name).exists():
+    if request.GET.get("add") == "true" and not StickerPack.objects.filter(name=pack_name).exists():
+        # Attempt to add pack; this may return 405 for GET, so we re-check existence after.
+        print(add_sticker_pack(request, pack_name=pack_name).text)
+    elif not StickerPack.objects.filter(name=pack_name).exists():
         return JsonResponse({"error": "Pack not found on our server"}, status=404)
-
-    sticker_pack = StickerPack.objects.get(name=pack_name)
+    
+    # Ensure the pack exists before calling .get()
+    try:
+        sticker_pack = StickerPack.objects.get(name=pack_name)
+    except StickerPack.DoesNotExist:
+        return JsonResponse({"error": "Pack not found on our server"}, status=404)
 
     sticker_list = []
     for i in sticker_pack.stickers.all():
