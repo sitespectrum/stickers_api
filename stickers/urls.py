@@ -3,6 +3,7 @@ from . import response
 
 urlpatterns = [
     path("add_pack", response.add_sticker_pack, name="add_pack"),
+    path("update_pack", response.update_pack, name="update_pack"),
     path("get_packs", response.get_packs, name="get_packs"),
     path("get_sticker/<int:sticker_id>", response.get_sticker, name="get_packs"),
     path("favourites", response.favourite_stickers, name="get_favourite_stickers"),

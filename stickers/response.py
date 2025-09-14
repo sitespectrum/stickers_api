@@ -36,6 +36,7 @@ async def fetch_thumbnail(client: httpx.AsyncClient, data: dict):
             or data.get("thumb")
             or data.get("stickers")[0].get("thumbnail")
             or data.get("stickers")[0].get("thumb")
+            or data.get("stickers")[0]
     )
     if not thumb:
         return None
@@ -148,6 +149,77 @@ def add_sticker_pack(request: WSGIRequest, pack_name: str = None,):
     if request.user.is_authenticated:
         user_data.sticker_packs.add(sticker_pack_obj)
         user_data.save()
+
+    return JsonResponse({"status": "Ok"}, status=200)
+
+
+@utils.panic_protected()
+@utils.safe_protected()
+@utils.fallback_protected()
+@require_http_methods(["POST"])
+def update_pack(request: WSGIRequest):
+    try:
+        body = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid request body"}, status=400)
+    pack_name = body.get("pack_name")
+    if not pack_name:
+        return JsonResponse({"error": "Missing pack_id"}, status=400)
+    if not StickerPack.objects.filter(name=pack_name).exists():
+        return JsonResponse({"error": "Pack not found on our server"}, status=404)
+
+    sticker_pack = StickerPack.objects.get(name=pack_name)
+    r = httpx.get(f"{TELEGRAM_API}/getStickerSet?name={sticker_pack.name}", timeout=10)
+    if r.status_code != 200:
+        return JsonResponse({"error": "Pack not found"}, status=404)
+    data = r.json()["result"]
+    if data["title"] != sticker_pack.title:
+        sticker_pack.title = data["title"]
+        sticker_pack.save()
+    thumb_task = fetch_thumbnail(httpx.AsyncClient(timeout=10), data)
+    thumb_data = asyncio.run(thumb_task)
+    if thumb_data and thumb_data["file_unique_id"] != sticker_pack.thumbnail.unique_file_id:
+        sticker_pack.thumbnail.file_name = thumb_data["file_path"]
+        sticker_pack.thumbnail.file_id = thumb_data["file_id"]
+        sticker_pack.thumbnail.unique_file_id = thumb_data["file_unique_id"]
+        sticker_pack.thumbnail.save()
+
+    unique_ids = [i["file_unique_id"] for i in data["stickers"]]
+
+    missing_stickers = []
+
+    for i in data["stickers"]:
+        if not sticker_pack.stickers.filter(unique_file_id=i["file_unique_id"]).exists():
+            missing_stickers.append(i)
+            continue
+        current_sticker = sticker_pack.stickers.get(unique_file_id=i["file_unique_id"])
+
+        if current_sticker.emoji != i["emoji"]:
+            current_sticker.emoji = i["emoji"]
+        if current_sticker.is_video != i.get("is_video", False):
+            current_sticker.is_video = i.get("is_video", False)
+        if current_sticker.is_animated != i.get("is_animated", False):
+            current_sticker.is_animated = i.get("is_animated", False)
+        current_sticker.save()
+
+    task = fetch_all(missing_stickers)
+    missing_stickers = asyncio.run(task)
+    to_batch_create = []
+    for i in missing_stickers:
+        if not i:
+            continue
+        to_batch_create.append(Sticker(
+            emoji=i["emoji"],
+            file_name=i["file_path"],
+            file_id=i["file_id"],
+            unique_file_id=i["file_unique_id"],
+            is_video=i.get("is_video", False),
+            is_animated=i.get("is_animated", False),
+        ))
+
+    Sticker.objects.bulk_create(to_batch_create)
+    sticker_pack.stickers.add(*to_batch_create)
+    sticker_pack.save()
 
     return JsonResponse({"status": "Ok"}, status=200)
 
