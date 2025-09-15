@@ -10,6 +10,7 @@ from api.models import ErrorLog, UserData, ROLE_CHOICES
 from authenticate import wrappers
 from stickers_backend import utils
 from stickers_backend.settings import GIT_USERNAME, GIT_PASSWORD
+from django.core.paginator import Paginator
 
 
 # Create your views here.
@@ -17,6 +18,14 @@ from stickers_backend.settings import GIT_USERNAME, GIT_PASSWORD
 @login_required
 @wrappers.require_role(["owner"])
 def get_all(request: WSGIRequest):
+    page = request.GET.get("page", 1)
+    try:
+        page = int(page)
+    except ValueError:
+        return JsonResponse({
+            "status": "Error",
+            "error": "Page must be an integer.",
+        }, status=400)
     logs = ErrorLog.objects.all().order_by("-id")
     log_list = []
     for log in logs:
@@ -25,9 +34,17 @@ def get_all(request: WSGIRequest):
             "title": str(log),
             "severity": log.error_severity,
         })
+    pages = Paginator(log_list, 50)
+    if page > pages.num_pages:
+        return JsonResponse({
+            "status": "Error",
+            "error": "Page does not exist.",
+        }, status=404)
     return JsonResponse({
         "status": "Ok",
-        "logs": log_list
+        "logs": pages.page(page).object_list,
+        "pages": pages.num_pages,
+        "page": page,
     })
 
 
