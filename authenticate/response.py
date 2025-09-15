@@ -276,4 +276,5 @@ def me(request: WSGIRequest):
         "role": dict(ROLE_CHOICES)[user_data.role],
         "email": request.user.email or "no email",
         "profile_pic": user_data.pfp_link,
+        "login_method": "Stickerß profile"
     }, status=200)

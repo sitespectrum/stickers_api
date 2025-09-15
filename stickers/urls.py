@@ -9,4 +9,5 @@ urlpatterns = [
     path("favourites", response.favourite_stickers, name="get_favourite_stickers"),
     path("get_pack/<str:pack_name>", response.get_one_pack, name="get_one_pack"),
     path("remove_pack/<str:pack_name>", response.remove_pack, name="remove_pack"),
+    path("stats", response.stats, name="stats"),
 ]

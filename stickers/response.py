@@ -3,6 +3,7 @@ import asyncio
 
 from django.core.cache import cache
 import httpx
+from django.db.models import Count
 from django.http import JsonResponse, StreamingHttpResponse, HttpResponseNotFound
 from django.views.decorators.http import require_http_methods
 from django.core.handlers.wsgi import WSGIRequest
@@ -71,15 +72,17 @@ def add_sticker_pack(request: WSGIRequest, pack_name: str = None,):
     # Parse body
     if not pack_name and request.method != "POST":
         return JsonResponse({"error": "Method not allowed"}, status=405)
-    try:
-        body = json.loads(request.body)
-    except json.JSONDecodeError:
-        return JsonResponse({"error": "Invalid request body"}, status=400)
+    if not pack_name:
+        try:
+            body = json.loads(request.body)
+        except json.JSONDecodeError:
+            return JsonResponse({"error": "Invalid request body"}, status=400)
 
     # Safely extract pack_name: prefer body value if present, fallback to argument
-    body_pack_name = body.get("pack_name")
-    if body_pack_name:
-        pack_name = body_pack_name.split("/")[-1]
+        body_pack_name = body.get("pack_name")
+    else:
+        body_pack_name = pack_name
+    pack_name = body_pack_name.split("/")[-1].lower()
     if not pack_name:
         return JsonResponse({"error": "Missing pack_name"}, status=400)
 
@@ -114,7 +117,7 @@ def add_sticker_pack(request: WSGIRequest, pack_name: str = None,):
 
     # Create StickerPack
     sticker_pack_obj = StickerPack.objects.create(
-        name=data["name"], title=data["title"]
+        name=data["name"].lower(), title=data["title"]
     )
 
     # Create thumbnail Sticker
@@ -427,3 +430,33 @@ def favourite_stickers(request: WSGIRequest):
         user_data.favourite_stickers.add(Sticker.objects.get(id=sticker_id))
     user_data.save()
     return JsonResponse({"status": "Ok"}, status=200)
+
+
+@utils.panic_protected()
+@utils.safe_protected()
+@utils.fallback_protected()
+@require_http_methods(["GET"])
+def stats(request: WSGIRequest):
+    additional = {}
+    if request.user.is_authenticated:
+        user_data = UserData.objects.get(user=request.user)
+        additional = {
+            "favourite_stickers": user_data.favourite_stickers.count(),
+            "sticker_packs": user_data.sticker_packs.count(),
+        }
+    stickerpacks_with_user_count = StickerPack.objects.annotate(
+        user_count=Count('userdata')
+    )
+
+    sticker_packs = StickerPack.objects.all()
+
+    most_used_packs = stickerpacks_with_user_count.order_by('-user_count')[:5]
+
+    return JsonResponse({
+        "status": "Ok",
+        "most_used_packs": [{"name": i.name, "title": i.title, "thumbnail": i.thumbnail.id} for i in most_used_packs],
+        "recently_added": [{"name": i.name, "title": i.title, "thumbnail": i.thumbnail.id} for i in sticker_packs.order_by("-id")[:5]],
+        "total_packs": sticker_packs.count(),
+        "total_stickers": Sticker.objects.count() - sticker_packs.count(),
+        **additional,
+    }, status=200)
