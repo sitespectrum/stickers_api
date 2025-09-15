@@ -58,6 +58,7 @@ class CustomExceptionHandlerMiddleware(MiddlewareMixin):
             "HTTPError",
             "IndexError",
             "StopIteration",
+            "ConnectionError",
         ],
         "low": [
             "TypeError",
@@ -65,6 +66,7 @@ class CustomExceptionHandlerMiddleware(MiddlewareMixin):
             "TemplateDoesNotExist",
             "DeprecationWarning",
             "ZeroDivisionError",
+            "EmptyPage",
         ],
     }
 
