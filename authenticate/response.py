@@ -216,7 +216,7 @@ def forgot_password(request: WSGIRequest):
         return JsonResponse({"error": "Invalid body"}, status=400)
     try:
         params = {
-            "secret": HCAPTCHA_SECRET,
+            "secret": TURNSTILE_SECRET,
             "response": data["token"]
         }
     except KeyError:
