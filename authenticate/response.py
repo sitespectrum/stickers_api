@@ -3,7 +3,7 @@ from datetime import timedelta
 from json import JSONDecodeError
 
 from stickers_backend import utils
-from stickers_backend.settings import HCAPTCHA_SECRET, PASSWORD_ATTEMPT_LIMIT
+from stickers_backend.settings import TURNSTILE_SECRET, PASSWORD_ATTEMPT_LIMIT
 from django.db import IntegrityError
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
@@ -70,21 +70,34 @@ def logout(request: WSGIRequest):
 @utils.fallback_protected()
 @utils.maintenance_protected()
 @require_http_methods(["POST"])
-def register(request: WSGIRequest, invite_code):
+def register(request: WSGIRequest):
+    try:
+        body = json.loads(request.body)
+    except JSONDecodeError:
+        return JsonResponse({
+            "status": "Error",
+            "error": "Bad request"
+        }, status=400)
     params = {
-        "secret": HCAPTCHA_SECRET,
-        "response": request.POST.get("cf-turnstile-response")
+        "secret": TURNSTILE_SECRET,
+        "response": body.get("cf-turnstile-response")
     }
     captcha_data = requests.post("https://challenges.cloudflare.com/turnstile/v0/siteverify", json=params).json()
     if not captcha_data["success"]:
         return JsonResponse({"error": "CAPTCHA failed"}, status=403)
 
     request.session.clear_expired()
+    if not body.get("username"):
+        return JsonResponse({"error": "Username is required"}, status=400)
+    if not body.get("password"):
+        return JsonResponse({"error": "Password is required"}, status=400)
+    if not body.get("email"):
+        return JsonResponse({"error": "Email is required"}, status=400)
     try:
         new_user = User.objects.create_user(
-            username=request.POST.get("username"),
-            password=request.POST.get("password"),
-            email=request.POST.get("email"),
+            username=body.get("username"),
+            password=body.get("password"),
+            email=body.get("email"),
             is_staff=False
         )
     except IntegrityError:

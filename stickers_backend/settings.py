@@ -26,7 +26,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = os.getenv("DJANGO_SECRET")
 PASSWORD_ATTEMPT_LIMIT = os.getenv("PASSWORD_ATTEMPT_LIMIT")
-HCAPTCHA_SECRET = os.getenv("HCAPTCHA_SECRET")
+TURNSTILE_SECRET = os.getenv("TURNSTILE_SECRET")
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 GIT_USERNAME = os.getenv("GIT_USERNAME")
 GIT_PASSWORD = os.getenv("GIT_PASSWORD")
