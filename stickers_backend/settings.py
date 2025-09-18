@@ -81,6 +81,7 @@ CORS_ALLOWED_ORIGINS = [
     "https://subrectal-consanguineously-sammy.ngrok-free.app",
     "https://*.loca.lt",
     "https://oizqk-37-76-46-208.a.free.pinggy.link",
+    "https://stickerss.sitespectrum.dev",
 ]
 CORS_ALLOW_CREDENTIALS = True
 # Application definition
