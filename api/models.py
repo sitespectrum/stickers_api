@@ -16,6 +16,12 @@ ROLE_CHOICES = (
     ('user', 'User'),
 )
 
+OAUTH_PROVIDERS = (
+    ("discord", "Discord"),
+    ("telegram", "Telegram"),
+    ("builtin", "Built-in")
+)
+
 FILE_TYPES = (
     ("image", "Image"),
     ("document", "Document"),
@@ -80,6 +86,8 @@ class UserData(models.Model):
     pfp_link = models.CharField(max_length=255, default="/person-fill.svg")
     favourite_stickers = ManyToManyField(to=Sticker, blank=True)
     sticker_packs = ManyToManyField(to=StickerPack, blank=True)
+    oauth_id = models.CharField(max_length=255, blank=True, null=True)
+    oauth_provider = models.CharField(max_length=255, choices=OAUTH_PROVIDERS, default="builtin")
 
     def __str__(self):
         return f"{self.user.username}'s user data"

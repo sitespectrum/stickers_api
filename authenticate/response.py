@@ -32,6 +32,30 @@ def login(request: WSGIRequest):
         }, status=400)
     # I wrote this at nearly 8pm while half asleep so don't ask questions. And yes, it works.
     request.session.clear_expired()
+    login_method = body.get("login_method", "builtin")
+
+    if login_method == "telegram":
+        if UserData.objects.filter(oauth_id=body.get("id"), oauth_provider="telegram").exists():
+            user_data = UserData.objects.get(oauth_id=body.get("id"), oauth_provider="telegram")
+            user = user_data.user
+            auth_login(request, user)
+            return JsonResponse({"status": "Ok"}, status=200)
+        else:
+            user = User.objects.create(
+                username=body.get("username"),
+            )
+            user.save()
+            user_data = UserData.objects.create(
+                user=user,
+                oauth_id=body.get("id"),
+                oauth_provider="telegram",
+                display_name=body.get("first_name") + (" " + body.get("last_name") if body.get("last_name") else ""),
+                pfp_link=body.get("photo_url")
+            )
+            user_data.save()
+            auth_login(request, user)
+            return JsonResponse({"status": "Ok"}, status=200)
+
     user = authenticate(request, username=body.get("username"), password=body.get("password"))
     if user is not None:
         user_data = UserData.objects.get(user=user)
