@@ -80,7 +80,7 @@ def delete_stickers_on_pack_delete(sender, instance, **kwargs):
 class UserData(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE)
     display_name = models.CharField(max_length=255, blank=True, null=True)
-    role = models.CharField(max_length=255, choices=ROLE_CHOICES)
+    role = models.CharField(max_length=255, choices=ROLE_CHOICES, default="user")
     unsuccessful_attempts = models.IntegerField(default=0)
     is_disabled = models.BooleanField(default=False)
     pfp_link = models.CharField(max_length=255, default="/person-fill.svg")
