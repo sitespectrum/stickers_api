@@ -19,7 +19,7 @@ ROLE_CHOICES = (
 OAUTH_PROVIDERS = (
     ("discord", "Discord"),
     ("telegram", "Telegram"),
-    ("builtin", "Built-in")
+    ("builtin", "Stickerß profile")
 )
 
 FILE_TYPES = (

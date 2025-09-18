@@ -2,22 +2,73 @@ import time
 from datetime import timedelta
 from json import JSONDecodeError
 
+from django.shortcuts import redirect
+
 from stickers_backend import utils
-from stickers_backend.settings import TURNSTILE_SECRET, PASSWORD_ATTEMPT_LIMIT
+from stickers_backend.settings import TURNSTILE_SECRET, PASSWORD_ATTEMPT_LIMIT, DISCORD_ID, DISCORD_KEY, \
+    DISCORD_REDIRECT
 from django.db import IntegrityError
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
 from django.core.handlers.wsgi import WSGIRequest
 import json
 # import modules.send_mail
-from api.models import UserData, PasswordResetCode, ROLE_CHOICES
+from api.models import UserData, PasswordResetCode, ROLE_CHOICES, OAUTH_PROVIDERS
 import requests
 from django.contrib.auth import authenticate, login as auth_login, logout as auth_logout
 from django.contrib.auth.models import User
 from django.utils import timezone
 from authenticate import wrappers
-from django.contrib.auth.decorators import login_required
 import uuid
+
+
+def discord_callback(request):
+    code = request.GET.get("code")
+    if not code:
+        return JsonResponse({"error": "Invalid request"}, status=400)
+
+    data = {
+        "client_id": DISCORD_ID,
+        "client_secret": DISCORD_KEY,
+        "grant_type": "authorization_code",
+        "code": code,
+        "redirect_uri": DISCORD_REDIRECT + "/api/auth/discord/callback",
+    }
+    headers = {"Content-Type": "application/x-www-form-urlencoded"}
+    r = requests.post("https://discord.com/api/oauth2/token", data=data, headers=headers)
+    token = r.json()
+
+    # Get user info
+    try:
+        user_info = requests.get("https://discord.com/api/users/@me", headers={
+            "Authorization": f"Bearer {token['access_token']}"
+        }).json()
+    except KeyError:
+        return JsonResponse({"error": "Unable to login"}, status=400)
+
+    if UserData.objects.filter(oauth_id=user_info["id"], oauth_provider="discord").exists():
+        user_data = UserData.objects.get(oauth_id=user_info["id"], oauth_provider="discord")
+        user = user_data.user
+        auth_login(request, user)
+
+        return redirect(DISCORD_REDIRECT)
+
+    user = User.objects.create(
+        username=user_info["username"],
+        email=user_info["email"] if user_info["verified"] else ""
+    )
+    user.save()
+    user_data = UserData.objects.create(
+        user=user,
+        oauth_id=user_info["id"],
+        oauth_provider="discord",
+        display_name=user_info["global_name"],
+        pfp_link=f"https://cdn.discordapp.com/avatars/{user_info['id']}/{user_info['avatar']}.png",
+        role="user"
+    )
+    user_data.save()
+
+    return redirect(DISCORD_REDIRECT)
 
 
 # Create your views here.
@@ -314,5 +365,5 @@ def me(request: WSGIRequest):
         "role": dict(ROLE_CHOICES)[user_data.role],
         "email": request.user.email or "no email",
         "profile_pic": user_data.pfp_link,
-        "login_method": "Stickerß profile"
+        "login_method": dict(OAUTH_PROVIDERS)[user_data.oauth_provider],
     }, status=200)
