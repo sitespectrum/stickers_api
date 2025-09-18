@@ -50,7 +50,8 @@ def login(request: WSGIRequest):
                 oauth_id=body.get("id"),
                 oauth_provider="telegram",
                 display_name=body.get("first_name") + (" " + body.get("last_name") if body.get("last_name") else ""),
-                pfp_link=body.get("photo_url")
+                pfp_link=body.get("photo_url"),
+                role="user"
             )
             user_data.save()
             auth_login(request, user)
