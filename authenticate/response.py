@@ -6,7 +6,7 @@ from django.shortcuts import redirect
 
 from stickers_backend import utils
 from stickers_backend.settings import TURNSTILE_SECRET, PASSWORD_ATTEMPT_LIMIT, DISCORD_ID, DISCORD_KEY, \
-    DISCORD_REDIRECT
+    DISCORD_REDIRECT, DISCORD_CALLBACK
 from django.db import IntegrityError
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
@@ -32,7 +32,7 @@ def discord_callback(request):
         "client_secret": DISCORD_KEY,
         "grant_type": "authorization_code",
         "code": code,
-        "redirect_uri": DISCORD_REDIRECT + "/api/auth/discord/callback",
+        "redirect_uri": DISCORD_CALLBACK,
     }
     headers = {"Content-Type": "application/x-www-form-urlencoded"}
     r = requests.post("https://discord.com/api/oauth2/token", data=data, headers=headers)
