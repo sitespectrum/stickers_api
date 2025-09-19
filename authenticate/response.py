@@ -112,23 +112,23 @@ def login(request: WSGIRequest):
     if user is not None:
         user_data = UserData.objects.get(user=user)
         if user_data.is_disabled:
-            return JsonResponse({"error": "Please reset your password using the \"Forgot password\" button"}, status=423)
+            return JsonResponse({"error": "Your account has been locked for security reasons. Please reset your password"}, status=423)
         auth_login(request, user)
         user_data.unsuccessful_attempts = 0
         user_data.save()
         return JsonResponse({"status": "Ok"}, status=200)
     else:
         try:
-            user = User.objects.get(username=request.POST.get("username"))
+            user = User.objects.get(username=body.get("username"))
             user_data = UserData.objects.get(user=user)
-            if user_data.unsuccessful_attempts == PASSWORD_ATTEMPT_LIMIT or user_data.is_disabled:
-                return JsonResponse({"error": "Please reset your password using the \"Forgot password\" button"}, status=423)
+            if user_data.unsuccessful_attempts >= PASSWORD_ATTEMPT_LIMIT or user_data.is_disabled:
+                return JsonResponse({"error": "Your account has been locked for security reasons. Please reset your password"}, status=423)
             user_data.unsuccessful_attempts += 1
-            if user_data.unsuccessful_attempts == PASSWORD_ATTEMPT_LIMIT:
+            user_data.save()
+            if user_data.unsuccessful_attempts >= PASSWORD_ATTEMPT_LIMIT:
                 user_data.is_disabled = True
                 user_data.save()
                 return JsonResponse({"error": "Too many unsuccessful attempts. Reset password to continue"}, status=423)
-            user_data.save()
         except User.DoesNotExist:
             pass
         return JsonResponse({"error": "Invalid username or password"}, status=403)

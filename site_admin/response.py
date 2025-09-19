@@ -6,7 +6,7 @@ from django.core.handlers.wsgi import WSGIRequest
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
 from api import models
-from api.models import ErrorLog, UserData, ROLE_CHOICES
+from api.models import ErrorLog, UserData, ROLE_CHOICES, OAUTH_PROVIDERS
 from authenticate import wrappers
 from stickers_backend import utils
 from stickers_backend.settings import GIT_USERNAME, GIT_PASSWORD
@@ -145,7 +145,6 @@ def create_log(request: WSGIRequest):
 
 
 @utils.panic_protected()
-@utils.safe_protected()
 @utils.fallback_protected()
 @login_required
 @wrappers.require_role(["owner"])
@@ -200,15 +199,20 @@ def create_user(request: WSGIRequest):
 
 
 @utils.panic_protected()
-@utils.safe_protected()
 @utils.fallback_protected()
 @login_required
 @wrappers.require_role(["owner"])
 @require_http_methods(["GET"])
 def get_roles(request: WSGIRequest):
+    obj_list = []
+    for role in ROLE_CHOICES:
+        obj_list.append({
+            "name": role[1],
+            "code": role[0],
+        })
     return JsonResponse({
         "status": "Ok",
-        "roles": ROLE_CHOICES,
+        "roles": obj_list,
     }, status=200)
 
 
@@ -239,9 +243,13 @@ def modify_user(request: WSGIRequest, user_id):
         return JsonResponse({
             "status": "Ok",
             "username": user_obj.username,
-            "role": user_data.role,
+            "role": dict(ROLE_CHOICES)[user_data.role],
             "display_name": user_data.display_name,
             "email": user_obj.email,
+            "stickers": user_data.sticker_packs.count(),
+            "favourites": user_data.favourite_stickers.count(),
+            "login_method": dict(OAUTH_PROVIDERS)[user_data.oauth_provider],
+            "login_method_code": user_data.oauth_provider,
         })
 
     try:
@@ -258,4 +266,24 @@ def modify_user(request: WSGIRequest, user_id):
 
     return JsonResponse({
         "status": "Ok",
+    }, status=200)
+
+
+@utils.panic_protected()
+@utils.fallback_protected()
+@login_required
+@wrappers.require_role(["owner"])
+@require_http_methods(["GET"])
+def search_users(request: WSGIRequest):
+    users = User.objects.filter(username__icontains=request.GET.get("q", ""))
+    user_list = []
+    for user in users:
+        user_list.append({
+            "id": user.id,
+            "username": user.username,
+            "role": dict(ROLE_CHOICES)[UserData.objects.get(user=user).role],
+        })
+    return JsonResponse({
+        "status": "Ok",
+        "users": user_list
     }, status=200)
