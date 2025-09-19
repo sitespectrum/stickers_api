@@ -12,6 +12,7 @@ from authenticate import wrappers
 from stickers_backend import utils
 from stickers_backend.settings import GIT_USERNAME, GIT_PASSWORD
 from django.core.paginator import Paginator
+from django.db.models import Q
 
 
 # Create your views here.
@@ -151,7 +152,7 @@ def create_log(request: WSGIRequest):
 @wrappers.require_role(["owner"])
 @require_http_methods(["GET"])
 def get_users(request: WSGIRequest):
-    users = User.objects.all()
+    users = User.objects.filter(~Q(id=request.user.id))
     user_list = []
     for user in users:
         user_list.append({
@@ -231,6 +232,11 @@ def modify_user(request: WSGIRequest, user_id):
         }, status=404)
 
     user_obj = User.objects.get(id=user_id)
+    if user_obj.id == request.user.id:
+        return JsonResponse({
+            "status": "Error",
+            "error": "You cannot modify yourself.",
+        }, status=400)
 
     if request.method == "DELETE":
         user_obj.delete()
