@@ -1,3 +1,4 @@
+import time
 from datetime import datetime
 import json
 from django.contrib.auth.decorators import login_required
@@ -242,6 +243,7 @@ def modify_user(request: WSGIRequest, user_id):
     if request.method == "GET":
         return JsonResponse({
             "status": "Ok",
+            "id": user_obj.id,
             "username": user_obj.username,
             "role": dict(ROLE_CHOICES)[user_data.role],
             "display_name": user_data.display_name,
@@ -257,13 +259,13 @@ def modify_user(request: WSGIRequest, user_id):
     except json.decoder.JSONDecodeError:
         return JsonResponse({"status": "Bad Request"}, status=400)
 
-    if body["password"]:
+    if body.get("password"):
         user_obj.set_password(body["password"])
         user_obj.save()
 
-    user_data.role = body["role"]
-    user_data.save()
-
+    if body.get("role"):
+        user_data.role = body["role"]
+        user_data.save()
     return JsonResponse({
         "status": "Ok",
     }, status=200)
