@@ -97,7 +97,7 @@ INSTALLED_APPS = [
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
-    'django.contrib.sessions',
+    'qsessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'corsheaders',
@@ -106,10 +106,13 @@ INSTALLED_APPS = [
     'site_admin'
 ]
 
+USE_X_FORWARDED_HOST = True
+
 MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
-    'django.contrib.sessions.middleware.SessionMiddleware',
+    'stickers_backend.middleware.RealIPMiddleware',
+    'qsessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     # 'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
@@ -117,6 +120,8 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'stickers_backend.middleware.CustomExceptionHandlerMiddleware',
 ]
+
+SESSION_ENGINE = "qsessions.backends.db"
 
 LOGIN_REDIRECT_URL = "/dashboard"
 LOGIN_URL = "/auth/login"
