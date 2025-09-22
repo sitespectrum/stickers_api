@@ -13,4 +13,5 @@ urlpatterns = [
     path('users/roles', response.get_roles),
     path('users/<int:user_id>', response.modify_user),
     path('users/search', response.search_users),
+    path('users/logout', response.logout_user),
 ]
