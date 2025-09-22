@@ -111,7 +111,7 @@ def login(request: WSGIRequest):
     user = authenticate(request, username=body.get("username"), password=body.get("password"))
     if user is not None:
         user_data = UserData.objects.get(user=user)
-        if user_data.is_disabled:
+        if user_data.is_locked:
             return JsonResponse({"error": "Your account has been locked for security reasons. Please reset your password"}, status=423)
         auth_login(request, user)
         user_data.unsuccessful_attempts = 0
@@ -121,12 +121,12 @@ def login(request: WSGIRequest):
         try:
             user = User.objects.get(username=body.get("username"))
             user_data = UserData.objects.get(user=user)
-            if user_data.unsuccessful_attempts >= PASSWORD_ATTEMPT_LIMIT or user_data.is_disabled:
+            if user_data.unsuccessful_attempts >= PASSWORD_ATTEMPT_LIMIT or user_data.is_locked:
                 return JsonResponse({"error": "Your account has been locked for security reasons. Please reset your password"}, status=423)
             user_data.unsuccessful_attempts += 1
             user_data.save()
             if user_data.unsuccessful_attempts >= PASSWORD_ATTEMPT_LIMIT:
-                user_data.is_disabled = True
+                user_data.is_locked = True
                 user_data.save()
                 return JsonResponse({"error": "Too many unsuccessful attempts. Reset password to continue"}, status=423)
         except User.DoesNotExist:
@@ -338,7 +338,7 @@ def reset_password(request: WSGIRequest):
     user = code_model.for_user
 
     user_data = UserData.objects.get(user=user)
-    user_data.is_disabled = False
+    user_data.is_locked = False
     user_data.unsuccessful_attempts = 0
     user_data.save()
 

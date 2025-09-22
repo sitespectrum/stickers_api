@@ -298,6 +298,10 @@ def search_users(request: WSGIRequest):
     }, status=200)
 
 
+def _logout_user(user_id):
+    Session.objects.filter(user__id=user_id).delete()
+
+
 @utils.panic_protected()
 @utils.fallback_protected()
 @utils.safe_protected()
@@ -313,7 +317,30 @@ def logout_user(request: WSGIRequest):
         return JsonResponse({"error": "Missing user_id"}, status=400)
     if not User.objects.filter(id=body["user_id"]).exists():
         return JsonResponse({"error": "User not found"}, status=404)
-    user = User.objects.get(id=body["user_id"])
-    Session.objects.filter(user=user).delete()
+    _logout_user(body["user_id"])
+
+    return JsonResponse({"status": "Ok"}, status=200)
+
+
+@utils.panic_protected()
+@utils.fallback_protected()
+@utils.safe_protected()
+@login_required
+@wrappers.require_role(["owner"])
+@require_http_methods(["POST"])
+def lock_user(request: WSGIRequest):
+    try:
+        body = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid body"}, status=400)
+    if not body.get("user_id"):
+        return JsonResponse({"error": "Missing user_id"}, status=400)
+    if not User.objects.filter(id=body["user_id"]).exists():
+        return JsonResponse({"error": "User not found"}, status=404)
+    user = UserData.objects.get(user=User.objects.get(id=body["user_id"]))
+    user.is_locked = True
+    user.save()
+
+    _logout_user(body["user_id"])
 
     return JsonResponse({"status": "Ok"}, status=200)
