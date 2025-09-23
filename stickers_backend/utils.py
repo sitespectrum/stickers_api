@@ -16,6 +16,27 @@ SAFE = False
 FALLBACK = False
 MAINTENANCE = False
 
+statuses = {
+    "panic": "Panic",
+    "safe": "Safe",
+    "fallback": "Fallback",
+    "maintenance": "Maintenance",
+    "normal": "Normal"
+}
+
+
+def get_status():
+    if PANIC:
+        return "panic"
+    elif SAFE:
+        return "safe"
+    elif FALLBACK:
+        return "fallback"
+    elif MAINTENANCE:
+        return "maintenance"
+    else:
+        return "normal"
+
 
 def neutral():
     global PANIC, SAFE, FALLBACK, MAINTENANCE

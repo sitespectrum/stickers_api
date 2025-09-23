@@ -18,7 +18,7 @@ from qsessions.models import Session
 
 # Create your views here.
 
-@login_required
+@wrappers.login_required()
 @wrappers.require_role(["owner"])
 def get_all(request: WSGIRequest):
     page = request.GET.get("page", 1)
@@ -51,7 +51,7 @@ def get_all(request: WSGIRequest):
     })
 
 
-@login_required
+@wrappers.login_required()
 @wrappers.require_role(["owner"])
 def get_log(request: WSGIRequest, log_id):
     if not ErrorLog.objects.filter(id=log_id).exists():
@@ -74,7 +74,18 @@ def get_log(request: WSGIRequest, log_id):
     })
 
 
-@login_required
+@wrappers.login_required()
+@wrappers.require_role(["owner"])
+def get_status(request: WSGIRequest):
+    return JsonResponse({
+        "status": "Ok",
+        "server_operation_title": utils.statuses[utils.get_status()],
+        "server_operation_code": utils.get_status(),
+        "statuses": utils.statuses,
+    }, status=200)
+
+
+@wrappers.login_required()
 @wrappers.require_role(["owner"])
 def reset_warning_status(request: WSGIRequest):
     utils.neutral()
@@ -90,14 +101,16 @@ def reset_warning_status(request: WSGIRequest):
     return JsonResponse({"status": "Ok"}, status=200)
 
 
-@login_required
+@wrappers.login_required()
 @wrappers.require_role(["owner"])
+@require_http_methods(["POST"])
 def set_service_status(request: WSGIRequest, status):
     statues = {
         "panic": utils.panic,
         "safe": utils.safe,
         "fallback": utils.fallback,
         "maintenance": utils.maintenance,
+        "normal": utils.neutral,
     }
 
     if status not in statues.keys():
@@ -105,6 +118,11 @@ def set_service_status(request: WSGIRequest, status):
             "status": "Error",
             "error": "Invalid status specified.",
         }, status=400)
+
+    if status == utils.get_status():
+        return JsonResponse({
+            "status": "Not changed"
+        }, status=200)
 
     statues[status]()
 
@@ -119,7 +137,7 @@ def set_service_status(request: WSGIRequest, status):
     return JsonResponse({"status": "Ok"}, status=200)
 
 
-@login_required
+@wrappers.login_required()
 @wrappers.require_role(["owner"])
 def update(request: WSGIRequest):
     resp = utils.self_update(username=GIT_USERNAME, password=GIT_PASSWORD)
@@ -129,7 +147,7 @@ def update(request: WSGIRequest):
     }, status=200)
 
 
-@login_required
+@wrappers.login_required()
 @wrappers.require_role(["owner"])
 @require_http_methods(["POST"])
 def create_log(request: WSGIRequest):
@@ -149,7 +167,7 @@ def create_log(request: WSGIRequest):
 
 @utils.panic_protected()
 @utils.fallback_protected()
-@login_required
+@wrappers.login_required()
 @wrappers.require_role(["owner"])
 @require_http_methods(["GET"])
 def get_users(request: WSGIRequest):
@@ -170,7 +188,7 @@ def get_users(request: WSGIRequest):
 @utils.panic_protected()
 @utils.safe_protected()
 @utils.fallback_protected()
-@login_required
+@wrappers.login_required()
 @wrappers.require_role(["owner"])
 @require_http_methods(["POST"])
 def create_user(request: WSGIRequest):
@@ -203,7 +221,7 @@ def create_user(request: WSGIRequest):
 
 @utils.panic_protected()
 @utils.fallback_protected()
-@login_required
+@wrappers.login_required()
 @wrappers.require_role(["owner"])
 @require_http_methods(["GET"])
 def get_roles(request: WSGIRequest):
@@ -222,7 +240,7 @@ def get_roles(request: WSGIRequest):
 @utils.panic_protected()
 @utils.safe_protected()
 @utils.fallback_protected()
-@login_required
+@wrappers.login_required()
 @wrappers.require_role(["owner"])
 @require_http_methods(["POST", "DELETE", "GET"])
 def modify_user(request: WSGIRequest, user_id):
@@ -280,7 +298,7 @@ def modify_user(request: WSGIRequest, user_id):
 
 @utils.panic_protected()
 @utils.fallback_protected()
-@login_required
+@wrappers.login_required()
 @wrappers.require_role(["owner"])
 @require_http_methods(["GET"])
 def search_users(request: WSGIRequest):
@@ -305,7 +323,7 @@ def _logout_user(user_id):
 @utils.panic_protected()
 @utils.fallback_protected()
 @utils.safe_protected()
-@login_required
+@wrappers.login_required()
 @wrappers.require_role(["owner"])
 @require_http_methods(["POST"])
 def logout_user(request: WSGIRequest):
@@ -325,7 +343,7 @@ def logout_user(request: WSGIRequest):
 @utils.panic_protected()
 @utils.fallback_protected()
 @utils.safe_protected()
-@login_required
+@wrappers.login_required()
 @wrappers.require_role(["owner"])
 @require_http_methods(["POST"])
 def lock_user(request: WSGIRequest):
