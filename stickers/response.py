@@ -228,7 +228,6 @@ def update_pack(request: WSGIRequest):
 
 
 @utils.panic_protected()
-@utils.safe_protected()
 @utils.fallback_protected()
 @require_http_methods(["GET"])
 def get_packs(request: WSGIRequest):
@@ -264,7 +263,6 @@ session = requests.Session()
 
 
 @utils.panic_protected()
-@utils.safe_protected()
 @utils.fallback_protected()
 @require_http_methods(["GET"])
 def get_sticker(request, sticker_id):
@@ -344,7 +342,6 @@ def get_sticker(request, sticker_id):
 
 
 @utils.panic_protected()
-@utils.safe_protected()
 @utils.fallback_protected()
 @require_http_methods(["GET"])
 def get_one_pack(request: WSGIRequest, pack_name):
@@ -397,7 +394,6 @@ def remove_pack(request: WSGIRequest, pack_name):
 
 
 @utils.panic_protected()
-@utils.safe_protected()
 @utils.fallback_protected()
 @require_http_methods(["GET", "POST"])
 @wrappers.login_required()
@@ -416,6 +412,8 @@ def favourite_stickers(request: WSGIRequest):
             "status": "Ok",
             "stickers": sticker_list
         }, status=200)
+    if utils.SAFE:
+        return JsonResponse({"error": "Unable to perform database write operation"}, status=503)
     try:
         body = json.loads(request.body)
     except json.JSONDecodeError:
@@ -433,7 +431,6 @@ def favourite_stickers(request: WSGIRequest):
 
 
 @utils.panic_protected()
-@utils.safe_protected()
 @utils.fallback_protected()
 @require_http_methods(["GET"])
 def stats(request: WSGIRequest):
