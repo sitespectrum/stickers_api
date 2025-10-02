@@ -20,3 +20,18 @@ def require_role(role_list):
             return view_func(request, *args, **kwargs)
         return _wrapped_view
     return decorator
+
+
+def login_required():
+    def decorator(view_func):
+        @wraps(view_func)
+        def _wrapped_view(request, *args, **kwargs):
+            if not request.user.is_authenticated:
+                return JsonResponse({
+                    "status": "Error",
+                    "error": "You are not logged in.",
+                }, status=401)
+
+            return view_func(request, *args, **kwargs)
+        return _wrapped_view
+    return decorator

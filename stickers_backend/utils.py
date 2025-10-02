@@ -16,6 +16,27 @@ SAFE = False
 FALLBACK = False
 MAINTENANCE = False
 
+statuses = {
+    "panic": "Panic",
+    "safe": "Safe",
+    "fallback": "Fallback",
+    "maintenance": "Maintenance",
+    "normal": "Normal"
+}
+
+
+def get_status():
+    if PANIC:
+        return "panic"
+    elif SAFE:
+        return "safe"
+    elif FALLBACK:
+        return "fallback"
+    elif MAINTENANCE:
+        return "maintenance"
+    else:
+        return "normal"
+
 
 def neutral():
     global PANIC, SAFE, FALLBACK, MAINTENANCE
@@ -57,20 +78,11 @@ def panic_protected():
     def decorator(view_func):
         @wraps(view_func)
         def _wrapped_view(request, *args, **kwargs):
-            if PANIC and "/api" in request.path:
+            if PANIC:
                 return JsonResponse({
                     "status": "Error",
-                    "error": "Service unavailable.",
+                    "error": "Service unavailable due to a critical error.",
                 }, status=503)
-            if PANIC:
-                page_contents = """
-                <div class='center-container'>
-                    <h1>503 - Service unavailable</h1>
-                </div>"""
-                with open("frontend/error.html") as f:
-                    return HttpResponse(
-                        f.read().replace("%error%", page_contents)
-                    )
 
             return view_func(request, *args, **kwargs)
 
@@ -83,20 +95,11 @@ def safe_protected():
     def decorator(view_func):
         @wraps(view_func)
         def _wrapped_view(request, *args, **kwargs):
-            if SAFE and "/api" in request.path:
+            if SAFE:
                 return JsonResponse({
                     "status": "Error",
-                    "error": "Service unavailable.",
+                    "error": "Unable to perform database write operation.",
                 }, status=503)
-            if SAFE:
-                page_contents = """
-                <div class='center-container'>
-                    <h1>503 - Service unavailable</h1>
-                </div>"""
-                with open("frontend/error.html") as f:
-                    return HttpResponse(
-                        f.read().replace("%error%", page_contents)
-                    )
 
             return view_func(request, *args, **kwargs)
 
@@ -109,17 +112,11 @@ def maintenance_protected():
     def decorator(view_func):
         @wraps(view_func)
         def _wrapped_view(request, *args, **kwargs):
-            if MAINTENANCE and "/api" in request.path:
+            if MAINTENANCE:
                 return JsonResponse({
                     "status": "Error",
                     "error": "Service under maintenance.",
                 }, status=503)
-            if MAINTENANCE:
-                page_contents = "<h1>Our website is currently under maintenance</h1>"
-                with open("frontend/error.html") as f:
-                    return HttpResponse(
-                        f.read().replace("%error%", page_contents)
-                    )
 
             return view_func(request, *args, **kwargs)
 
@@ -132,20 +129,11 @@ def fallback_protected():
     def decorator(view_func):
         @wraps(view_func)
         def _wrapped_view(request, *args, **kwargs):
-            if FALLBACK and "/api" in request.path:
+            if FALLBACK:
                 return JsonResponse({
                     "status": "Error",
-                    "error": "Service unavailable.",
+                    "error": "Unable to perform database operation.",
                 }, status=503)
-            if FALLBACK:
-                page_contents = """
-                <div class='center-container'>
-                    <h1>503 - Service unavailable</h1>
-                </div>"""
-                with open("frontend/error.html") as f:
-                    return HttpResponse(
-                        f.read().replace("%error%", page_contents)
-                    )
 
             return view_func(request, *args, **kwargs)
 

@@ -25,8 +25,16 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = os.getenv("DJANGO_SECRET")
-PASSWORD_ATTEMPT_LIMIT = os.getenv("PASSWORD_ATTEMPT_LIMIT")
-HCAPTCHA_SECRET = os.getenv("HCAPTCHA_SECRET")
+PASSWORD_ATTEMPT_LIMIT = int(os.getenv("PASSWORD_ATTEMPT_LIMIT"))
+TURNSTILE_SECRET = os.getenv("TURNSTILE_SECRET")
+TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
+GIT_USERNAME = os.getenv("GIT_USERNAME")
+GIT_PASSWORD = os.getenv("GIT_PASSWORD")
+RESEND_API_KEY = os.getenv("RESEND_API_KEY")
+DISCORD_KEY = os.getenv("DISCORD_KEY")
+DISCORD_ID = os.getenv("DISCORD_CLIENT_ID")
+DISCORD_REDIRECT = os.getenv("DISCORD_REDIRECT")
+DISCORD_CALLBACK = os.getenv("DISCORD_CALLBACK")
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.getenv("DEBUG") == "1"
@@ -59,24 +67,52 @@ V----------------------------------------------------V
 print(debug if DEBUG else production)
 
 ALLOWED_HOSTS = ["*"]
+# Cookies
+if DEBUG:
+    SESSION_COOKIE_SAMESITE = None   # default Lax
+    SESSION_COOKIE_SECURE = False    # allow HTTP
+    CSRF_COOKIE_SAMESITE = None
+    CSRF_COOKIE_SECURE = False
+else:
+    SESSION_COOKIE_SAMESITE = "None"
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SAMESITE = "None"
+    CSRF_COOKIE_SECURE = True
 
-
+# CORS
+CORS_ALLOWED_ORIGINS = [
+    "http://127.0.0.1:5173",   # frontend origin
+    "https://subrectal-consanguineously-sammy.ngrok-free.app",
+    "https://*.loca.lt",
+    "https://oizqk-37-76-46-208.a.free.pinggy.link",
+    "https://stickerss.sitespectrum.dev",
+]
+CORS_ALLOW_CREDENTIALS = True
 # Application definition
+CSRF_TRUSTED_ORIGINS = [
+    "https://stickerss.sitespectrum.dev",
+]
 
 INSTALLED_APPS = [
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
-    'django.contrib.sessions',
+    'qsessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'corsheaders',
     'api',
     'authenticate',
+    'site_admin'
 ]
 
+USE_X_FORWARDED_HOST = True
+
 MIDDLEWARE = [
+    'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
-    'django.contrib.sessions.middleware.SessionMiddleware',
+    'stickers_backend.middleware.RealIPMiddleware',
+    'qsessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     # 'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
@@ -84,6 +120,8 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'stickers_backend.middleware.CustomExceptionHandlerMiddleware',
 ]
+
+SESSION_ENGINE = "qsessions.backends.db"
 
 LOGIN_REDIRECT_URL = "/dashboard"
 LOGIN_URL = "/auth/login"
@@ -155,6 +193,7 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/5.2/howto/static-files/
 
 STATIC_URL = 'static/'
+STATIC_ROOT = BASE_DIR / 'staticfiles'
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field

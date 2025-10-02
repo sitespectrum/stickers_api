@@ -1,22 +1,74 @@
+import time
 from datetime import timedelta
 from json import JSONDecodeError
 
+from django.shortcuts import redirect
+
 from stickers_backend import utils
-from stickers_backend.settings import HCAPTCHA_SECRET, PASSWORD_ATTEMPT_LIMIT
+from stickers_backend.settings import TURNSTILE_SECRET, PASSWORD_ATTEMPT_LIMIT, DISCORD_ID, DISCORD_KEY, \
+    DISCORD_REDIRECT, DISCORD_CALLBACK
 from django.db import IntegrityError
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
 from django.core.handlers.wsgi import WSGIRequest
 import json
 # import modules.send_mail
-from api.models import UserData, PasswordResetCode, ROLE_CHOICES
+from api.models import UserData, PasswordResetCode, ROLE_CHOICES, OAUTH_PROVIDERS
 import requests
 from django.contrib.auth import authenticate, login as auth_login, logout as auth_logout
 from django.contrib.auth.models import User
 from django.utils import timezone
 from authenticate import wrappers
-from django.contrib.auth.decorators import login_required
 import uuid
+
+
+def discord_callback(request):
+    code = request.GET.get("code")
+    if not code:
+        return JsonResponse({"error": "Invalid request"}, status=400)
+
+    data = {
+        "client_id": DISCORD_ID,
+        "client_secret": DISCORD_KEY,
+        "grant_type": "authorization_code",
+        "code": code,
+        "redirect_uri": DISCORD_CALLBACK,
+    }
+    headers = {"Content-Type": "application/x-www-form-urlencoded"}
+    r = requests.post("https://discord.com/api/oauth2/token", data=data, headers=headers)
+    token = r.json()
+
+    # Get user info
+    try:
+        user_info = requests.get("https://discord.com/api/users/@me", headers={
+            "Authorization": f"Bearer {token['access_token']}"
+        }).json()
+    except KeyError:
+        return JsonResponse({"error": "Unable to login"}, status=400)
+
+    if UserData.objects.filter(oauth_id=user_info["id"], oauth_provider="discord").exists():
+        user_data = UserData.objects.get(oauth_id=user_info["id"], oauth_provider="discord")
+        user = user_data.user
+        auth_login(request, user)
+
+        return redirect(DISCORD_REDIRECT)
+
+    user = User.objects.create(
+        username=user_info["username"],
+        email=user_info["email"] if user_info["verified"] else ""
+    )
+    user.save()
+    user_data = UserData.objects.create(
+        user=user,
+        oauth_id=user_info["id"],
+        oauth_provider="discord",
+        display_name=user_info["global_name"],
+        pfp_link=f"https://cdn.discordapp.com/avatars/{user_info['id']}/{user_info['avatar']}.png",
+        role="user"
+    )
+    user_data.save()
+
+    return redirect(DISCORD_REDIRECT)
 
 
 # Create your views here.
@@ -31,27 +83,52 @@ def login(request: WSGIRequest):
         }, status=400)
     # I wrote this at nearly 8pm while half asleep so don't ask questions. And yes, it works.
     request.session.clear_expired()
+    login_method = body.get("login_method", "builtin")
+
+    if login_method == "telegram":
+        if UserData.objects.filter(oauth_id=body.get("id"), oauth_provider="telegram").exists():
+            user_data = UserData.objects.get(oauth_id=body.get("id"), oauth_provider="telegram")
+            user = user_data.user
+            auth_login(request, user)
+            return JsonResponse({"status": "Ok"}, status=200)
+        else:
+            user = User.objects.create(
+                username=body.get("username"),
+            )
+            user.save()
+            user_data = UserData.objects.create(
+                user=user,
+                oauth_id=body.get("id"),
+                oauth_provider="telegram",
+                display_name=body.get("first_name") + (" " + body.get("last_name") if body.get("last_name") else ""),
+                pfp_link=body.get("photo_url"),
+                role="user"
+            )
+            user_data.save()
+            auth_login(request, user)
+            return JsonResponse({"status": "Ok"}, status=200)
+
     user = authenticate(request, username=body.get("username"), password=body.get("password"))
     if user is not None:
         user_data = UserData.objects.get(user=user)
-        if user_data.is_disabled:
-            return JsonResponse({"error": "Too many unsuccessful attempts. Reset password to continue"}, status=423)
+        if user_data.is_locked:
+            return JsonResponse({"error": "Your account has been locked for security reasons. Please reset your password"}, status=423)
         auth_login(request, user)
         user_data.unsuccessful_attempts = 0
         user_data.save()
         return JsonResponse({"status": "Ok"}, status=200)
     else:
         try:
-            user = User.objects.get(username=request.POST.get("username"))
+            user = User.objects.get(username=body.get("username"))
             user_data = UserData.objects.get(user=user)
-            if user_data.unsuccessful_attempts == PASSWORD_ATTEMPT_LIMIT or user_data.is_disabled:
-                return JsonResponse({"error": "Too many unsuccessful attempts. Reset password to continue"}, status=423)
+            if user_data.unsuccessful_attempts >= PASSWORD_ATTEMPT_LIMIT or user_data.is_locked:
+                return JsonResponse({"error": "Your account has been locked for security reasons. Please reset your password"}, status=423)
             user_data.unsuccessful_attempts += 1
-            if user_data.unsuccessful_attempts == PASSWORD_ATTEMPT_LIMIT:
-                user_data.is_disabled = True
+            user_data.save()
+            if user_data.unsuccessful_attempts >= PASSWORD_ATTEMPT_LIMIT:
+                user_data.is_locked = True
                 user_data.save()
                 return JsonResponse({"error": "Too many unsuccessful attempts. Reset password to continue"}, status=423)
-            user_data.save()
         except User.DoesNotExist:
             pass
         return JsonResponse({"error": "Invalid username or password"}, status=403)
@@ -69,21 +146,34 @@ def logout(request: WSGIRequest):
 @utils.fallback_protected()
 @utils.maintenance_protected()
 @require_http_methods(["POST"])
-def register(request: WSGIRequest, invite_code):
+def register(request: WSGIRequest):
+    try:
+        body = json.loads(request.body)
+    except JSONDecodeError:
+        return JsonResponse({
+            "status": "Error",
+            "error": "Bad request"
+        }, status=400)
     params = {
-        "secret": HCAPTCHA_SECRET,
-        "response": request.POST.get("cf-turnstile-response")
+        "secret": TURNSTILE_SECRET,
+        "response": body.get("cf-turnstile-response")
     }
     captcha_data = requests.post("https://challenges.cloudflare.com/turnstile/v0/siteverify", json=params).json()
     if not captcha_data["success"]:
         return JsonResponse({"error": "CAPTCHA failed"}, status=403)
 
     request.session.clear_expired()
+    if not body.get("username"):
+        return JsonResponse({"error": "Username is required"}, status=400)
+    if not body.get("password"):
+        return JsonResponse({"error": "Password is required"}, status=400)
+    if not body.get("email"):
+        return JsonResponse({"error": "Email is required"}, status=400)
     try:
         new_user = User.objects.create_user(
-            username=request.POST.get("username"),
-            password=request.POST.get("password"),
-            email=request.POST.get("email"),
+            username=body.get("username"),
+            password=body.get("password"),
+            email=body.get("email"),
             is_staff=False
         )
     except IntegrityError:
@@ -103,7 +193,7 @@ def register(request: WSGIRequest, invite_code):
 @utils.safe_protected()
 @utils.fallback_protected()
 @require_http_methods(["POST"])
-@login_required
+@wrappers.login_required()
 def change_email(request: WSGIRequest):
     try:
         data = json.loads(request.body)
@@ -126,7 +216,7 @@ def change_email(request: WSGIRequest):
 @utils.safe_protected()
 @utils.fallback_protected()
 @require_http_methods(["POST"])
-@login_required
+@wrappers.login_required()
 def change_password(request: WSGIRequest):
     try:
         data = json.loads(request.body)
@@ -137,6 +227,56 @@ def change_password(request: WSGIRequest):
 
     request.user.set_password(data["password"])
     request.user.save()
+
+    auth_login(request, request.user)
+
+    return JsonResponse({"status": "Ok"}, status=200)
+
+
+@utils.panic_protected()
+@utils.safe_protected()
+@utils.fallback_protected()
+@require_http_methods(["POST"])
+@wrappers.login_required()
+def change_display_name(request: WSGIRequest):
+    try:
+        data = json.loads(request.body)
+    except JSONDecodeError:
+        return JsonResponse({"error": "Invalid request body"}, status=400)
+    if not json.loads(request.body)["display_name"]:
+        return JsonResponse({"error": "Invalid password"}, status=400)
+
+    user_data = UserData.objects.get(user=request.user)
+    user_data.display_name = data["display_name"]
+    user_data.save()
+
+    return JsonResponse({"status": "Ok"}, status=200)
+
+
+@utils.panic_protected()
+@utils.safe_protected()
+@utils.fallback_protected()
+@require_http_methods(["POST"])
+@wrappers.login_required()
+def update_profile(request: WSGIRequest):
+    try:
+        data = json.loads(request.body)
+    except JSONDecodeError:
+        return JsonResponse({"error": "Invalid request body"}, status=400)
+
+    user_data = UserData.objects.get(user=request.user)
+    if "password" in data.keys():
+        request.user.set_password(data["password"])
+        request.user.save()
+        auth_login(request, request.user)
+    if "display_name" in data.keys():
+        user_data.display_name = data["display_name"]
+    if "pfp_link" in data.keys():
+        user_data.pfp_link = data["pfp_link"]
+    if "email" in data.keys():
+        request.user.email = data["email"]
+        request.user.save()
+    user_data.save()
 
     return JsonResponse({"status": "Ok"}, status=200)
 
@@ -152,7 +292,7 @@ def forgot_password(request: WSGIRequest):
         return JsonResponse({"error": "Invalid body"}, status=400)
     try:
         params = {
-            "secret": HCAPTCHA_SECRET,
+            "secret": TURNSTILE_SECRET,
             "response": data["token"]
         }
     except KeyError:
@@ -198,7 +338,7 @@ def reset_password(request: WSGIRequest):
     user = code_model.for_user
 
     user_data = UserData.objects.get(user=user)
-    user_data.is_disabled = False
+    user_data.is_locked = False
     user_data.unsuccessful_attempts = 0
     user_data.save()
 
@@ -220,6 +360,10 @@ def me(request: WSGIRequest):
         return JsonResponse({"status": "Error"}, status=403)
     user_data = UserData.objects.get(user=request.user)
     return JsonResponse({
+        "username": request.user.username,
+        "display_name": user_data.display_name,
         "role": dict(ROLE_CHOICES)[user_data.role],
-        "email": request.user.email,
-    })
+        "email": request.user.email or "no email",
+        "profile_pic": user_data.pfp_link,
+        "login_method": dict(OAUTH_PROVIDERS)[user_data.oauth_provider],
+    }, status=200)
