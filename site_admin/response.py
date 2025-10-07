@@ -3,7 +3,6 @@ from datetime import datetime
 import json
 from django.utils import timezone
 
-from django.contrib.auth.decorators import login_required
 from django.contrib.auth.models import User
 from django.core.handlers.wsgi import WSGIRequest
 from django.http import JsonResponse
@@ -14,7 +13,7 @@ from authenticate import wrappers
 from stickers_backend import utils
 from stickers_backend.settings import GIT_USERNAME, GIT_PASSWORD
 from django.core.paginator import Paginator
-from django.db.models import Q, Count
+from django.db.models import Q
 from qsessions.models import Session
 
 
@@ -281,7 +280,7 @@ def modify_user(request: WSGIRequest, user_id):
             "login_method": dict(OAUTH_PROVIDERS)[user_data.oauth_provider],
             "login_method_code": user_data.oauth_provider,
             "total_bans": len(user_data.bans.all()),
-            "active_bans": len(user_data.bans.filter(expires_at__gt=timezone.now())),
+            "active_bans": len(user_data.bans.filter(Q(expires_at__gt=timezone.now()) | Q(expires_at=None))),
         })
 
     try:
