@@ -1,4 +1,5 @@
 from datetime import datetime
+from django.utils import timezone
 
 from django.core.handlers.wsgi import WSGIRequest
 from django.http import JsonResponse, HttpResponse
@@ -99,7 +100,7 @@ class CustomExceptionHandlerMiddleware(MiddlewareMixin):
                 error_message=str(exception),
                 error_traceback=traceback.format_exc() + f"\n\n{request.path}",
                 error_severity=error_severity,
-                error_time=datetime.now(),
+                error_time=timezone.now(),
                 panicked=error_severity == "critical",
                 safe=True if error_severity == "database" and error_type not in ["InterfaceError", "NotSupportedError"] else False,
                 fallback=error_type in ["InterfaceError", "NotSupportedError"],

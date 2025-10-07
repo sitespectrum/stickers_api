@@ -70,7 +70,8 @@ def get_log(request: WSGIRequest, log_id):
         "traceback": log.error_traceback,
         "severity": dict(models.ERROR_SEVERITIES)[log.error_severity],
         "panicked": log.panicked,
-        "time": f"{log.error_time.strftime('%Y-%m-%d %H:%M:%S')} UTC",
+        "time": f"{log.error_time.strftime('%Y. %m. %d. %H:%M:%S')} UTC",
+        "timestamp": log.error_time,
     })
 
 
