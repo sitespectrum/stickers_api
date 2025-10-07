@@ -2,6 +2,7 @@ import time
 from datetime import timedelta
 from json import JSONDecodeError
 
+from django.db.models import Q
 from django.shortcuts import redirect
 
 from stickers_backend import utils
@@ -48,6 +49,19 @@ def discord_callback(request):
 
     if UserData.objects.filter(oauth_id=user_info["id"], oauth_provider="discord").exists():
         user_data = UserData.objects.get(oauth_id=user_info["id"], oauth_provider="discord")
+        if user_data.bans.filter(Q(expires_at__gt=timezone.now()) | Q(expires_at__isnull=True)).exists():
+            return JsonResponse({
+                "reason": "banned",
+                "error": "You are currently banned.",
+                "bans": [
+                    {
+                        "id": i.id,
+                        "reason": i.reason,
+                        "expires_at": i.expires_at,
+                        "is_active": i.expires_at > timezone.now() if i.expires_at else True,
+                    } for i in user_data.bans.filter((Q(expires_at__gt=timezone.now()) | Q(expires_at=None)))
+                ]
+            }, status=403)
         user = user_data.user
         auth_login(request, user)
 
@@ -88,6 +102,19 @@ def login(request: WSGIRequest):
     if login_method == "telegram":
         if UserData.objects.filter(oauth_id=body.get("id"), oauth_provider="telegram").exists():
             user_data = UserData.objects.get(oauth_id=body.get("id"), oauth_provider="telegram")
+            if user_data.bans.filter(Q(expires_at__gt=timezone.now()) | Q(expires_at__isnull=True)).exists():
+                return JsonResponse({
+                    "reason": "banned",
+                    "error": "You are currently banned.",
+                    "bans": [
+                        {
+                            "id": i.id,
+                            "reason": i.reason,
+                            "expires_at": i.expires_at,
+                            "is_active": i.expires_at > timezone.now() if i.expires_at else True,
+                        } for i in user_data.bans.filter((Q(expires_at__gt=timezone.now()) | Q(expires_at=None)))
+                    ]
+                }, status=403)
             user = user_data.user
             auth_login(request, user)
             return JsonResponse({"status": "Ok"}, status=200)
@@ -111,6 +138,19 @@ def login(request: WSGIRequest):
     user = authenticate(request, username=body.get("username"), password=body.get("password"))
     if user is not None:
         user_data = UserData.objects.get(user=user)
+        if user_data.bans.filter(Q(expires_at__gt=timezone.now()) | Q(expires_at__isnull=True)).exists():
+            return JsonResponse({
+                "reason": "banned",
+                "error": "You are currently banned.",
+                "bans": [
+                    {
+                        "id": i.id,
+                        "reason": i.reason,
+                        "expires_at": i.expires_at,
+                        "is_active": i.expires_at > timezone.now() if i.expires_at else True,
+                    } for i in user_data.bans.filter((Q(expires_at__gt=timezone.now()) | Q(expires_at=None)))
+                ]
+            }, status=403)
         if user_data.is_locked:
             return JsonResponse({"error": "Your account has been locked for security reasons. Please reset your password"}, status=423)
         auth_login(request, user)

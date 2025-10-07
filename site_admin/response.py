@@ -1,6 +1,8 @@
 import time
 from datetime import datetime
 import json
+from django.utils import timezone
+
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.models import User
 from django.core.handlers.wsgi import WSGIRequest
@@ -12,7 +14,7 @@ from authenticate import wrappers
 from stickers_backend import utils
 from stickers_backend.settings import GIT_USERNAME, GIT_PASSWORD
 from django.core.paginator import Paginator
-from django.db.models import Q
+from django.db.models import Q, Count
 from qsessions.models import Session
 
 
@@ -278,6 +280,8 @@ def modify_user(request: WSGIRequest, user_id):
             "favourites": user_data.favourite_stickers.count(),
             "login_method": dict(OAUTH_PROVIDERS)[user_data.oauth_provider],
             "login_method_code": user_data.oauth_provider,
+            "total_bans": len(user_data.bans.all()),
+            "active_bans": len(user_data.bans.filter(expires_at__gt=timezone.now())),
         })
 
     try:
@@ -292,6 +296,36 @@ def modify_user(request: WSGIRequest, user_id):
     if body.get("role"):
         user_data.role = body["role"]
         user_data.save()
+    return JsonResponse({
+        "status": "Ok",
+    }, status=200)
+
+
+@utils.panic_protected()
+@utils.fallback_protected()
+@wrappers.login_required()
+@wrappers.require_role(["owner"])
+@require_http_methods(["GET", "POST", "DELETE"])
+def bans(request: WSGIRequest, user_id):
+    if not User.objects.filter(id=user_id).exists():
+        return JsonResponse({
+            "status": "Error",
+            "error": "User does not exists.",
+        }, status=404)
+    user_data = UserData.objects.get(user=User.objects.get(id=user_id))
+    if request.method == "GET":
+        only_active = request.GET.get("active_only", "false").lower() == "true"
+        return JsonResponse({
+            "status": "Ok",
+            "bans": [
+                {
+                    "id": i.id,
+                    "reason": i.reason,
+                    "expires_at": i.expires_at,
+                    "is_active": i.expires_at > timezone.now() if i.expires_at else True,
+                } for i in user_data.bans.filter((Q(expires_at__gt=timezone.now()) | Q(expires_at=None)) if only_active else Q())
+            ]
+        })
     return JsonResponse({
         "status": "Ok",
     }, status=200)

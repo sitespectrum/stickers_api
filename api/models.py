@@ -77,6 +77,11 @@ def delete_stickers_on_pack_delete(sender, instance, **kwargs):
         instance.thumbnail.delete()
 
 
+class Ban(models.Model):
+    reason = models.TextField(max_length=255)
+    expires_at = models.DateTimeField(null=True, blank=True)
+
+
 class UserData(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE)
     display_name = models.CharField(max_length=255, blank=True, null=True)
@@ -88,6 +93,7 @@ class UserData(models.Model):
     sticker_packs = ManyToManyField(to=StickerPack, blank=True)
     oauth_id = models.CharField(max_length=255, blank=True, null=True)
     oauth_provider = models.CharField(max_length=255, choices=OAUTH_PROVIDERS, default="builtin")
+    bans = ManyToManyField(to=Ban, blank=True)
 
     def __str__(self):
         return f"{self.user.username}'s user data"
