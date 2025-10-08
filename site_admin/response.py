@@ -322,7 +322,7 @@ def bans(request: WSGIRequest, user_id):
                     "reason": i.reason,
                     "expires_at": i.expires_at,
                     "is_active": i.expires_at > timezone.now() if i.expires_at else True,
-                } for i in user_data.bans.filter((Q(expires_at__gt=timezone.now()) | Q(expires_at=None)) if only_active else Q())
+                } for i in user_data.bans.filter((Q(expires_at__gt=timezone.now()) | Q(expires_at=None)) if only_active else Q()).order_by("expires_at")
             ]
         })
     return JsonResponse({
