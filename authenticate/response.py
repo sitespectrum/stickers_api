@@ -28,7 +28,7 @@ import uuid
 def discord_callback(request):
 
     if request.GET.get("error"):
-        redirect(f"{FRONTEND_URL}/login?error={request.GET.get('error')}&error_description={request.GET.get('error_description')}")
+        return redirect(f"{FRONTEND_URL}/login?error={request.GET.get('error')}&error_description={request.GET.get('error_description')}")
 
     code = request.GET.get("code")
     if not code:
