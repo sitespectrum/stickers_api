@@ -35,6 +35,7 @@ DISCORD_KEY = os.getenv("DISCORD_KEY")
 DISCORD_ID = os.getenv("DISCORD_CLIENT_ID")
 DISCORD_REDIRECT = os.getenv("DISCORD_REDIRECT")
 DISCORD_CALLBACK = os.getenv("DISCORD_CALLBACK")
+FRONTEND_URL = os.getenv("FRONTEND_URL") or ""
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.getenv("DEBUG") == "1"

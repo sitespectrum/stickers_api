@@ -1,12 +1,15 @@
+import base64
 import time
 from datetime import timedelta
 from json import JSONDecodeError
+from urllib.parse import urlencode
 
+from django.db.models import Q
 from django.shortcuts import redirect
 
 from stickers_backend import utils
 from stickers_backend.settings import TURNSTILE_SECRET, PASSWORD_ATTEMPT_LIMIT, DISCORD_ID, DISCORD_KEY, \
-    DISCORD_REDIRECT, DISCORD_CALLBACK
+    DISCORD_REDIRECT, DISCORD_CALLBACK, FRONTEND_URL
 from django.db import IntegrityError
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
@@ -23,6 +26,10 @@ import uuid
 
 
 def discord_callback(request):
+
+    if request.GET.get("error"):
+        return redirect(f"{FRONTEND_URL}/login?error={request.GET.get('error')}&error_description={request.GET.get('error_description')}")
+
     code = request.GET.get("code")
     if not code:
         return JsonResponse({"error": "Invalid request"}, status=400)
@@ -38,39 +45,65 @@ def discord_callback(request):
     r = requests.post("https://discord.com/api/oauth2/token", data=data, headers=headers)
     token = r.json()
 
-    # Get user info
     try:
-        user_info = requests.get("https://discord.com/api/users/@me", headers={
-            "Authorization": f"Bearer {token['access_token']}"
-        }).json()
+        user_info = requests.get(
+            "https://discord.com/api/users/@me",
+            headers={"Authorization": f"Bearer {token['access_token']}"}
+        ).json()
     except KeyError:
         return JsonResponse({"error": "Unable to login"}, status=400)
 
     if UserData.objects.filter(oauth_id=user_info["id"], oauth_provider="discord").exists():
         user_data = UserData.objects.get(oauth_id=user_info["id"], oauth_provider="discord")
+
+        active_bans = user_data.bans.filter(
+            Q(expires_at__gt=timezone.now()) | Q(expires_at__isnull=True)
+        )
+
+        if active_bans.exists():
+            bans_data = [
+                {
+                    "id": ban.id,
+                    "reason": ban.reason,
+                    "expires_at": ban.expires_at.isoformat() if ban.expires_at else None,
+                    "is_active": True,
+                }
+                for ban in active_bans
+            ]
+
+            bans_json = json.dumps(bans_data, default=str)
+            bans_b64 = base64.urlsafe_b64encode(bans_json.encode()).decode()
+
+            # Build redirect params
+            params = urlencode({
+                "reason": "banned",
+                "error": "You are currently banned.",
+                "bans": bans_b64,
+            })
+
+            # Redirect to frontend banned page
+            return redirect(f"{FRONTEND_URL}/banned?{params}")
+
+        # User is not banned — log them in
         user = user_data.user
         auth_login(request, user)
-
         return redirect(DISCORD_REDIRECT)
 
+    # Otherwise, create a new user
     user = User.objects.create(
         username=user_info["username"],
-        email=user_info["email"] if user_info["verified"] else ""
+        email=user_info["email"] if user_info.get("verified") else ""
     )
-    user.save()
     user_data = UserData.objects.create(
         user=user,
         oauth_id=user_info["id"],
         oauth_provider="discord",
-        display_name=user_info["global_name"],
+        display_name=user_info.get("global_name", user_info["username"]),
         pfp_link=f"https://cdn.discordapp.com/avatars/{user_info['id']}/{user_info['avatar']}.png",
         role="user"
     )
-    user_data.save()
 
     return redirect(DISCORD_REDIRECT)
-
-
 # Create your views here.
 @require_http_methods(["POST"])
 def login(request: WSGIRequest):
@@ -88,6 +121,19 @@ def login(request: WSGIRequest):
     if login_method == "telegram":
         if UserData.objects.filter(oauth_id=body.get("id"), oauth_provider="telegram").exists():
             user_data = UserData.objects.get(oauth_id=body.get("id"), oauth_provider="telegram")
+            if user_data.bans.filter(Q(expires_at__gt=timezone.now()) | Q(expires_at__isnull=True)).exists():
+                return JsonResponse({
+                    "reason": "banned",
+                    "error": "You are currently banned.",
+                    "bans": [
+                        {
+                            "id": i.id,
+                            "reason": i.reason,
+                            "expires_at": i.expires_at,
+                            "is_active": i.expires_at > timezone.now() if i.expires_at else True,
+                        } for i in user_data.bans.filter((Q(expires_at__gt=timezone.now()) | Q(expires_at=None)))
+                    ]
+                }, status=403)
             user = user_data.user
             auth_login(request, user)
             return JsonResponse({"status": "Ok"}, status=200)
@@ -111,6 +157,19 @@ def login(request: WSGIRequest):
     user = authenticate(request, username=body.get("username"), password=body.get("password"))
     if user is not None:
         user_data = UserData.objects.get(user=user)
+        if user_data.bans.filter(Q(expires_at__gt=timezone.now()) | Q(expires_at__isnull=True)).exists():
+            return JsonResponse({
+                "reason": "banned",
+                "error": "You are currently banned.",
+                "bans": [
+                    {
+                        "id": i.id,
+                        "reason": i.reason,
+                        "expires_at": i.expires_at,
+                        "is_active": i.expires_at > timezone.now() if i.expires_at else True,
+                    } for i in user_data.bans.filter((Q(expires_at__gt=timezone.now()) | Q(expires_at=None)))
+                ]
+            }, status=403)
         if user_data.is_locked:
             return JsonResponse({"error": "Your account has been locked for security reasons. Please reset your password"}, status=423)
         auth_login(request, user)
