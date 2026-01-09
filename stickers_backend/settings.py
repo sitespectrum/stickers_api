@@ -104,7 +104,8 @@ INSTALLED_APPS = [
     'corsheaders',
     'api',
     'authenticate',
-    'site_admin'
+    'site_admin',
+    'notes'
 ]
 
 USE_X_FORWARDED_HOST = True

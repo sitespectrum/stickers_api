@@ -68,6 +68,7 @@ async def _fetch_sticker_with_file(client, sticker):
 @utils.panic_protected()
 @utils.safe_protected()
 @utils.fallback_protected()
+@utils.maintenance_protected()
 def add_sticker_pack(request: WSGIRequest, pack_name: str = None,):
     # Parse body
     if not pack_name and request.method != "POST":
@@ -159,6 +160,7 @@ def add_sticker_pack(request: WSGIRequest, pack_name: str = None,):
 @utils.panic_protected()
 @utils.safe_protected()
 @utils.fallback_protected()
+@utils.maintenance_protected()
 @require_http_methods(["POST"])
 def update_pack(request: WSGIRequest):
     try:
@@ -229,6 +231,7 @@ def update_pack(request: WSGIRequest):
 
 @utils.panic_protected()
 @utils.fallback_protected()
+@utils.maintenance_protected()
 @require_http_methods(["GET"])
 def get_packs(request: WSGIRequest):
     if request.user.is_authenticated:
@@ -264,6 +267,7 @@ session = requests.Session()
 
 @utils.panic_protected()
 @utils.fallback_protected()
+@utils.maintenance_protected()
 @require_http_methods(["GET"])
 def get_sticker(request, sticker_id):
     if not Sticker.objects.filter(id=sticker_id).exists():
@@ -343,6 +347,7 @@ def get_sticker(request, sticker_id):
 
 @utils.panic_protected()
 @utils.fallback_protected()
+@utils.maintenance_protected()
 @require_http_methods(["GET"])
 def get_one_pack(request: WSGIRequest, pack_name):
     if request.GET.get("add") == "true" and not StickerPack.objects.filter(name=pack_name).exists():
@@ -377,6 +382,7 @@ def get_one_pack(request: WSGIRequest, pack_name):
 @utils.panic_protected()
 @utils.safe_protected()
 @utils.fallback_protected()
+@utils.maintenance_protected()
 @require_http_methods(["DELETE"])
 @wrappers.login_required()
 def remove_pack(request: WSGIRequest, pack_name):
@@ -395,6 +401,7 @@ def remove_pack(request: WSGIRequest, pack_name):
 
 @utils.panic_protected()
 @utils.fallback_protected()
+@utils.maintenance_protected()
 @require_http_methods(["GET", "POST"])
 @wrappers.login_required()
 def favourite_stickers(request: WSGIRequest):
@@ -432,6 +439,7 @@ def favourite_stickers(request: WSGIRequest):
 
 @utils.panic_protected()
 @utils.fallback_protected()
+@utils.maintenance_protected()
 @require_http_methods(["GET"])
 def stats(request: WSGIRequest):
     additional = {}

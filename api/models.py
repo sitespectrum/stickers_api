@@ -46,6 +46,15 @@ ERROR_SEVERITIES = (
 )
 
 
+class Note(models.Model):
+    name = models.CharField(max_length=255)
+    content = models.TextField()
+    owner = models.ForeignKey(User, on_delete=models.CASCADE)
+
+    def __str__(self):
+        return self.name
+
+
 class Sticker(models.Model):
     emoji = models.CharField(max_length=255)
     file_name = models.CharField(max_length=255)
