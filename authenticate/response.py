@@ -106,6 +106,9 @@ def discord_callback(request):
         return redirect(DISCORD_REDIRECT)
 
     # Otherwise, create a new user
+    if User.objects.filter(username=user_info["username"]).exists():
+        return redirect(
+            f"{FRONTEND_URL}/login?error=register_failed&error_description=A+user+with+this+username+already+exists+in+our+service.+Please+try+another+authentication+method.")
     user = User.objects.create(
         username=user_info["username"],
         email=user_info["email"] if user_info.get("verified") else ""
@@ -145,6 +148,11 @@ def login(request: WSGIRequest):
             auth_login(request, user)
             return JsonResponse({"status": "Ok"}, status=200)
         else:
+            if User.objects.filter(username=body.get("username")).exists():
+                return JsonResponse({
+                    "reason": "register_failed",
+                    "error": "A user with this username already exists in our service. Please try anther authentication method."
+                }, status=409)
             user = User.objects.create(
                 username=body.get("username"),
             )
