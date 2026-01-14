@@ -179,7 +179,7 @@ def get_users(request: WSGIRequest):
         user_list.append({
             "id": user.id,
             "username": user.username,
-            "role": dict(ROLE_CHOICES)[UserData.objects.get(user=user).role],
+            "role": UserData.objects.get(user=user).role,
         })
     return JsonResponse({
         "status": "Ok",
@@ -227,15 +227,9 @@ def create_user(request: WSGIRequest):
 @wrappers.require_role(["owner"])
 @require_http_methods(["GET"])
 def get_roles(request: WSGIRequest):
-    obj_list = []
-    for role in ROLE_CHOICES:
-        obj_list.append({
-            "name": role[1],
-            "code": role[0],
-        })
     return JsonResponse({
         "status": "Ok",
-        "roles": obj_list,
+        "roles": dict(ROLE_CHOICES),
     }, status=200)
 
 
@@ -272,7 +266,7 @@ def modify_user(request: WSGIRequest, user_id):
             "status": "Ok",
             "id": user_obj.id,
             "username": user_obj.username,
-            "role": dict(ROLE_CHOICES)[user_data.role],
+            "role": user_data.role,
             "display_name": user_data.display_name,
             "email": user_obj.email,
             "stickers": user_data.sticker_packs.count(),
