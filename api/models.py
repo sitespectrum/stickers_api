@@ -103,6 +103,7 @@ class UserData(models.Model):
     oauth_id = models.CharField(max_length=255, blank=True, null=True)
     oauth_provider = models.CharField(max_length=255, choices=OAUTH_PROVIDERS, default="builtin")
     bans = ManyToManyField(to=Ban, blank=True)
+    login_failed_ips = models.JSONField(default=dict)
 
     def __str__(self):
         return f"{self.user.username}'s user data"

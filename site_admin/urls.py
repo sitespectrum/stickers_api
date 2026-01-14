@@ -16,5 +16,5 @@ urlpatterns = [
     path('users/<int:user_id>/bans', response.bans),
     path('users/search', response.search_users),
     path('users/logout', response.logout_user),
-    path('users/lock', response.lock_user),
+    # path('users/lock', response.lock_user),
 ]

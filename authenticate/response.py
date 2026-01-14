@@ -9,14 +9,14 @@ from django.shortcuts import redirect
 
 from stickers_backend import utils
 from stickers_backend.settings import TURNSTILE_SECRET, PASSWORD_ATTEMPT_LIMIT, DISCORD_ID, DISCORD_KEY, \
-    DISCORD_REDIRECT, DISCORD_CALLBACK, FRONTEND_URL
+    DISCORD_REDIRECT, DISCORD_CALLBACK, FRONTEND_URL, PASSWORD_ATTEMPT_BAN_LIMIT
 from django.db import IntegrityError
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
 from django.core.handlers.wsgi import WSGIRequest
 import json
 # import modules.send_mail
-from api.models import UserData, PasswordResetCode, ROLE_CHOICES, OAUTH_PROVIDERS
+from api.models import UserData, PasswordResetCode, ROLE_CHOICES, OAUTH_PROVIDERS, Ban
 import requests
 from django.contrib.auth import authenticate, login as auth_login, logout as auth_logout
 from django.contrib.auth.models import User
@@ -25,8 +25,24 @@ from authenticate import wrappers
 import uuid
 
 
-def discord_callback(request):
+def check_for_bans(user_data):
+    if user_data.bans.filter(Q(expires_at__gt=timezone.now()) | Q(expires_at__isnull=True)).exists():
+        return JsonResponse({
+            "reason": "banned",
+            "error": "You are currently banned.",
+            "bans": [
+                {
+                    "id": i.id,
+                    "reason": i.reason,
+                    "expires_at": i.expires_at,
+                    "is_active": i.expires_at > timezone.now() if i.expires_at else True,
+                } for i in user_data.bans.filter((Q(expires_at__gt=timezone.now()) | Q(expires_at=None)))
+            ]
+        }, status=403)
+    return None
 
+
+def discord_callback(request):
     if request.GET.get("error"):
         return redirect(f"{FRONTEND_URL}/login?error={request.GET.get('error')}&error_description={request.GET.get('error_description')}")
 
@@ -94,7 +110,7 @@ def discord_callback(request):
         username=user_info["username"],
         email=user_info["email"] if user_info.get("verified") else ""
     )
-    user_data = UserData.objects.create(
+    UserData.objects.create(
         user=user,
         oauth_id=user_info["id"],
         oauth_provider="discord",
@@ -104,6 +120,8 @@ def discord_callback(request):
     )
 
     return redirect(DISCORD_REDIRECT)
+
+
 # Create your views here.
 @require_http_methods(["POST"])
 def login(request: WSGIRequest):
@@ -114,26 +132,15 @@ def login(request: WSGIRequest):
             "status": "Error",
             "error": "Bad request"
         }, status=400)
-    # I wrote this at nearly 8pm while half asleep so don't ask questions. And yes, it works.
     request.session.clear_expired()
     login_method = body.get("login_method", "builtin")
 
     if login_method == "telegram":
         if UserData.objects.filter(oauth_id=body.get("id"), oauth_provider="telegram").exists():
             user_data = UserData.objects.get(oauth_id=body.get("id"), oauth_provider="telegram")
-            if user_data.bans.filter(Q(expires_at__gt=timezone.now()) | Q(expires_at__isnull=True)).exists():
-                return JsonResponse({
-                    "reason": "banned",
-                    "error": "You are currently banned.",
-                    "bans": [
-                        {
-                            "id": i.id,
-                            "reason": i.reason,
-                            "expires_at": i.expires_at,
-                            "is_active": i.expires_at > timezone.now() if i.expires_at else True,
-                        } for i in user_data.bans.filter((Q(expires_at__gt=timezone.now()) | Q(expires_at=None)))
-                    ]
-                }, status=403)
+            bans = check_for_bans(user_data)
+            if bans:
+                return bans
             user = user_data.user
             auth_login(request, user)
             return JsonResponse({"status": "Ok"}, status=200)
@@ -157,37 +164,43 @@ def login(request: WSGIRequest):
     user = authenticate(request, username=body.get("username"), password=body.get("password"))
     if user is not None:
         user_data = UserData.objects.get(user=user)
-        if user_data.bans.filter(Q(expires_at__gt=timezone.now()) | Q(expires_at__isnull=True)).exists():
-            return JsonResponse({
-                "reason": "banned",
-                "error": "You are currently banned.",
-                "bans": [
-                    {
-                        "id": i.id,
-                        "reason": i.reason,
-                        "expires_at": i.expires_at,
-                        "is_active": i.expires_at > timezone.now() if i.expires_at else True,
-                    } for i in user_data.bans.filter((Q(expires_at__gt=timezone.now()) | Q(expires_at=None)))
-                ]
-            }, status=403)
+        bans = check_for_bans(user_data)
+        if bans:
+            return bans
         if user_data.is_locked:
             return JsonResponse({"error": "Your account has been locked for security reasons. Please reset your password"}, status=423)
         auth_login(request, user)
-        user_data.unsuccessful_attempts = 0
+        client_ip = utils.get_client_ip(request)
+        failed_attempts = user_data.login_failed_ips.get(client_ip, None)
+        if failed_attempts is not None:
+            user_data.login_failed_ips[client_ip] = 0
         user_data.save()
         return JsonResponse({"status": "Ok"}, status=200)
     else:
         try:
             user = User.objects.get(username=body.get("username"))
             user_data = UserData.objects.get(user=user)
-            if user_data.unsuccessful_attempts >= PASSWORD_ATTEMPT_LIMIT or user_data.is_locked:
-                return JsonResponse({"error": "Your account has been locked for security reasons. Please reset your password"}, status=423)
+            bans = check_for_bans(user_data)
+            if bans:
+                return bans
             user_data.unsuccessful_attempts += 1
             user_data.save()
-            if user_data.unsuccessful_attempts >= PASSWORD_ATTEMPT_LIMIT:
-                user_data.is_locked = True
+            client_ip = utils.get_client_ip(request)
+            failed_attempts = user_data.login_failed_ips.get(client_ip, None)
+            if failed_attempts is None:
+                user_data.login_failed_ips[client_ip] = 1
+            else:
+                user_data.login_failed_ips[client_ip] = failed_attempts + 1
+            user_data.save()
+            user_data.refresh_from_db()
+            failed_attempts = user_data.login_failed_ips[client_ip]
+            if failed_attempts >= PASSWORD_ATTEMPT_BAN_LIMIT:
+                ban = Ban.objects.create(reason="Too many unsuccessful login attempts.", expires_at=timezone.now() + timedelta(minutes=10))
+                user_data.bans.add(ban)
+                user_data.login_failed_ips[client_ip] = 10
                 user_data.save()
-                return JsonResponse({"error": "Too many unsuccessful attempts. Reset password to continue"}, status=423)
+            if failed_attempts >= PASSWORD_ATTEMPT_LIMIT:
+                time.sleep(failed_attempts)
         except User.DoesNotExist:
             pass
         return JsonResponse({"error": "Invalid username or password"}, status=403)
