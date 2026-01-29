@@ -106,7 +106,8 @@ INSTALLED_APPS = [
     'api',
     'authenticate',
     'site_admin',
-    'notes'
+    'notes',
+    'bookmarks'
 ]
 
 USE_X_FORWARDED_HOST = True

@@ -55,6 +55,15 @@ class Note(models.Model):
         return self.name
 
 
+class Bookmark(models.Model):
+    name = models.CharField(max_length=255)
+    url = models.URLField()
+    owner = models.ForeignKey(User, on_delete=models.CASCADE)
+
+    def __str__(self):
+        return self.name
+
+
 class Sticker(models.Model):
     emoji = models.CharField(max_length=255)
     file_name = models.CharField(max_length=255)
