@@ -1,4 +1,5 @@
 import datetime
+from time import timezone
 
 from django.db import models
 from django.contrib.auth.models import User
@@ -98,6 +99,13 @@ def delete_stickers_on_pack_delete(sender, instance, **kwargs):
 class Ban(models.Model):
     reason = models.TextField(max_length=255)
     expires_at = models.DateTimeField(null=True, blank=True)
+
+
+class OAUTHCode(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    code = models.CharField(max_length=255)
+    challenge = models.CharField(max_length=255)
+    expires_at = models.DateTimeField()
 
 
 class UserData(models.Model):

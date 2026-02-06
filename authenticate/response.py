@@ -1,22 +1,19 @@
-import base64
+import hashlib
 import time
 from datetime import timedelta
 from json import JSONDecodeError
-from urllib.parse import urlencode
 
 from django.db.models import Q
-from django.shortcuts import redirect
 
 from stickers_backend import utils
 from stickers_backend.settings import TURNSTILE_SECRET, PASSWORD_ATTEMPT_LIMIT, DISCORD_ID, DISCORD_KEY, \
-    DISCORD_REDIRECT, DISCORD_CALLBACK, FRONTEND_URL, PASSWORD_ATTEMPT_BAN_LIMIT
+    DISCORD_CALLBACK, PASSWORD_ATTEMPT_BAN_LIMIT
 from django.db import IntegrityError
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
 from django.core.handlers.wsgi import WSGIRequest
 import json
-# import modules.send_mail
-from api.models import UserData, PasswordResetCode, ROLE_CHOICES, OAUTH_PROVIDERS, Ban
+from api.models import UserData, PasswordResetCode, ROLE_CHOICES, OAUTH_PROVIDERS, Ban, OAUTHCode
 import requests
 from django.contrib.auth import authenticate, login as auth_login, logout as auth_logout
 from django.contrib.auth.models import User
@@ -40,6 +37,55 @@ def check_for_bans(user_data):
             ]
         }, status=403)
     return None
+
+
+@utils.panic_protected()
+@utils.safe_protected()
+@utils.fallback_protected()
+@require_http_methods(["POST"])
+def validate_oauth_code(request: WSGIRequest):
+    try:
+        body = json.loads(request.body)
+    except JSONDecodeError:
+        return JsonResponse({"error": "Invalid request body"}, status=400)
+
+    OAUTHCode.objects.filter(expires_at__lt=timezone.now()).delete()
+    if not OAUTHCode.objects.filter(code=body.get("code")).exists():
+        return JsonResponse({"error": "Invalid code"}, status=400)
+
+    code_obj = OAUTHCode.objects.get(code=body.get("code"))
+    if code_obj.challenge != hashlib.sha256(str(body.get("code_verifier")).encode("utf-8")).hexdigest():
+        return JsonResponse({"error": "Invalid code verifier"}, status=400)
+
+    auth_login(request, code_obj.user)
+    code_obj.delete()
+    return JsonResponse({"status": "Ok"}, status=200)
+
+
+@utils.panic_protected()
+@utils.safe_protected()
+@utils.fallback_protected()
+@wrappers.login_required()
+@require_http_methods(["POST"])
+def get_oauth_code(request: WSGIRequest):
+    try:
+        body = json.loads(request.body)
+    except JSONDecodeError:
+        return JsonResponse({"error": "Invalid request body"}, status=400)
+
+    oauth_code = uuid.uuid4().__str__()
+
+    if not body.get("challenge"):
+        return JsonResponse({"error": "Challenge missing"}, status=400)
+
+    OAUTHCode.objects.create(
+        user=request.user,
+        code=oauth_code,
+        challenge=body.get("challenge"),
+        expires_at=timezone.now() + timedelta(minutes=10)
+    )
+
+    return JsonResponse({"status": "Ok", "code": oauth_code}, status=200)
 
 
 @require_http_methods(["POST"])
@@ -103,7 +149,7 @@ def discord_callback(request):
         role="user"
     )
 
-    return redirect(DISCORD_REDIRECT)
+    return JsonResponse({"status": "Ok"}, status=200)
 
 
 # Create your views here.
@@ -410,9 +456,6 @@ def reset_password(request: WSGIRequest):
     return JsonResponse({"status": "Ok"}, status=200)
 
 
-@utils.panic_protected()
-@utils.safe_protected()
-@utils.fallback_protected()
 @require_http_methods(["GET"])
 def me(request: WSGIRequest):
     if not request.user.is_authenticated:
