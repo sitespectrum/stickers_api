@@ -42,11 +42,14 @@ def check_for_bans(user_data):
     return None
 
 
+@require_http_methods(["POST"])
 def discord_callback(request):
-    if request.GET.get("error"):
-        return redirect(f"{FRONTEND_URL}/login?error={request.GET.get('error')}&error_description={request.GET.get('error_description')}")
+    try:
+        body = json.loads(request.body)
+    except JSONDecodeError:
+        return JsonResponse({"error": "Invalid request body"}, status=400)
 
-    code = request.GET.get("code")
+    code = body.get("code")
     if not code:
         return JsonResponse({"error": "Invalid request"}, status=400)
 
@@ -72,43 +75,21 @@ def discord_callback(request):
     if UserData.objects.filter(oauth_id=user_info["id"], oauth_provider="discord").exists():
         user_data = UserData.objects.get(oauth_id=user_info["id"], oauth_provider="discord")
 
-        active_bans = user_data.bans.filter(
-            Q(expires_at__gt=timezone.now()) | Q(expires_at__isnull=True)
-        )
-
-        if active_bans.exists():
-            bans_data = [
-                {
-                    "id": ban.id,
-                    "reason": ban.reason,
-                    "expires_at": ban.expires_at.isoformat() if ban.expires_at else None,
-                    "is_active": True,
-                }
-                for ban in active_bans
-            ]
-
-            bans_json = json.dumps(bans_data, default=str)
-            bans_b64 = base64.urlsafe_b64encode(bans_json.encode()).decode()
-
-            # Build redirect params
-            params = urlencode({
-                "reason": "banned",
-                "error": "You are currently banned.",
-                "bans": bans_b64,
-            })
-
-            # Redirect to frontend banned page
-            return redirect(f"{FRONTEND_URL}/banned?{params}")
+        bans = check_for_bans(user_data)
+        if bans:
+            return bans
 
         # User is not banned — log them in
         user = user_data.user
         auth_login(request, user)
-        return redirect(DISCORD_REDIRECT)
+        return JsonResponse({"status": "Ok"}, status=200)
 
     # Otherwise, create a new user
     if User.objects.filter(username=user_info["username"]).exists():
-        return redirect(
-            f"{FRONTEND_URL}/login?error=register_failed&error_description=A+user+with+this+username+already+exists+in+our+service.+Please+try+another+authentication+method.")
+        return JsonResponse({
+            "reason": "register_failed",
+            "error": "A user with this username already exists in our service. Please try anther authentication method."
+        }, status=409)
     user = User.objects.create(
         username=user_info["username"],
         email=user_info["email"] if user_info.get("verified") else ""

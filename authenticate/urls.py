@@ -4,7 +4,7 @@ import api.urls
 
 urlpatterns = [
     path("login", response.login, name="login"),
-    path("discord/callback", response.discord_callback, name="discord_callback"),
+    path("login/discord", response.discord_callback, name="discord_callback"),
     path("register", response.register, name="register"),
     path("logout", response.logout, name="logout"),
     path("profile/change/email", response.change_email, name="change_email"),
