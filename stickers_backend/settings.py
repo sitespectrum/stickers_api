@@ -103,6 +103,7 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'corsheaders',
+    'django_extensions',
     'api',
     'authenticate',
     'site_admin',
