@@ -279,7 +279,7 @@ def get_sticker(request, sticker_id):
     cached_file = cache.get(cache_key)
 
     content_type, _ = mimetypes.guess_type(sticker.file_name.split("/")[-1])
-    content_type = content_type or "application/octet-stream"
+    content_type = content_type or "image/webp"
 
     # Serve from cache if available
     if cached_file:
@@ -337,6 +337,7 @@ def get_sticker(request, sticker_id):
     response['Content-Length'] = file_res.headers.get('Content-Length', '')
     response['Access-Control-Allow-Origin'] = request.headers.get('Referer', '*')
     response['Access-Control-Expose-Headers'] = 'Content-Length, Content-Disposition'
+    response['Content-Type'] = content_type
 
     # Cache the file after streaming
     if content_chunks:
