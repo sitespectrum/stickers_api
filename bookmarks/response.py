@@ -5,6 +5,7 @@ from django.core.handlers.wsgi import WSGIRequest
 from django.http import JsonResponse
 from django.shortcuts import render
 from django.views.decorators.http import require_GET, require_POST, require_http_methods
+from url_normalize import url_normalize
 
 from api.models import Bookmark
 from authenticate import wrappers
@@ -56,12 +57,12 @@ def save_bookmark(request: WSGIRequest, bookmark_id):
         return JsonResponse({"error": "Invalid body"}, status=400)
     if bookmark_id == 0:
         name = body.get("name")
-        url = body.get("url")
+        url = url_normalize(body.get("url"), default_scheme="https")
         if not url:
             return JsonResponse({"error": "No URL"}, status=400)
         if not name:
             r = requests.get(url)
-            html = bs4.BeautifulSoup(r.text)
+            html = bs4.BeautifulSoup(r.text, "html.parser")
             name = html.title.text
         Bookmark.objects.create(name=name, url=url, owner=request.user)
         return JsonResponse({"status": "Success"}, status=200)
@@ -69,12 +70,12 @@ def save_bookmark(request: WSGIRequest, bookmark_id):
         return JsonResponse({"error": "Bookmark not found"}, status=404)
     bookmark = Bookmark.objects.get(id=bookmark_id)
     name = body.get("name")
-    url = body.get("url")
+    url = url_normalize(body.get("url"), default_scheme="https")
     if not url:
         return JsonResponse({"error": "No URL"}, status=400)
-    if not name:
+    if not name or bookmark.url != url:
         r = requests.get(url)
-        html = bs4.BeautifulSoup(r.text)
+        html = bs4.BeautifulSoup(r.text, "html.parser")
         name = html.title.text
     bookmark.name = name
     bookmark.url = url
