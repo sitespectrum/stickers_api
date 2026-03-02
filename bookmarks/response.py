@@ -61,9 +61,12 @@ def save_bookmark(request: WSGIRequest, bookmark_id):
         if not url:
             return JsonResponse({"error": "No URL"}, status=400)
         if not name:
-            r = requests.get(url)
-            html = bs4.BeautifulSoup(r.text, "html.parser")
-            name = html.title.text
+            try:
+                r = requests.get(url)
+                html = bs4.BeautifulSoup(r.text, "html.parser")
+                name = html.title.text
+            except Exception as e:
+                name = url
         Bookmark.objects.create(name=name, url=url, owner=request.user)
         return JsonResponse({"status": "Success"}, status=200)
     if not Bookmark.objects.filter(id=bookmark_id, owner=request.user).exists():
@@ -74,9 +77,13 @@ def save_bookmark(request: WSGIRequest, bookmark_id):
     if not url:
         return JsonResponse({"error": "No URL"}, status=400)
     if not name or bookmark.url != url:
-        r = requests.get(url)
-        html = bs4.BeautifulSoup(r.text, "html.parser")
-        name = html.title.text
+        # noinspection PyBroadException
+        try:
+            r = requests.get(url)
+            html = bs4.BeautifulSoup(r.text, "html.parser")
+            name = html.title.text
+        except Exception as e:
+            name = url
     bookmark.name = name
     bookmark.url = url
     bookmark.save()
