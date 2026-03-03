@@ -68,6 +68,7 @@ def validate_oauth_code(request: WSGIRequest):
 @wrappers.login_required()
 @require_http_methods(["POST"])
 def get_oauth_code(request: WSGIRequest):
+    OAUTHCode.objects.filter(expires_at__lt=timezone.now()).delete()
     try:
         body = json.loads(request.body)
     except JSONDecodeError:
