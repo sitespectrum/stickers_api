@@ -15,6 +15,7 @@ ROLE_CHOICES = (
     ("admin", "Admin"),
     ("moderator", "Moderator"),
     ('user', 'User'),
+    ('system', 'System'),
 )
 
 OAUTH_PROVIDERS = (
@@ -27,7 +28,7 @@ FILE_TYPES = (
     ("image", "Image"),
     ("document", "Document"),
     ("application_info", "Application Info"),
-    ("release", "Release notes"),
+    ("release", "Release file"),
 )
 
 ANNOUNCEMENT_TYPES = (
@@ -99,6 +100,8 @@ def delete_stickers_on_pack_delete(sender, instance, **kwargs):
 class Ban(models.Model):
     reason = models.TextField(max_length=255)
     expires_at = models.DateTimeField(null=True, blank=True)
+    can_be_lifted = models.BooleanField(default=False)
+    banned_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)
 
 
 class OAUTHCode(models.Model):
@@ -183,7 +186,7 @@ class ErrorLog(models.Model):
 class Release(models.Model):
     version = models.CharField(max_length=255)
     release_date = models.DateField(blank=True, null=True, default=None)
-    release_note_file = models.ForeignKey(File, on_delete=models.SET_NULL, default=None, null=True, blank=True)
+    release_file = models.ForeignKey(File, on_delete=models.SET_NULL, default=None, null=True, blank=True)
 
     def __str__(self):
         return f"{self.version}"

@@ -247,6 +247,13 @@ def modify_user(request: WSGIRequest, user_id):
         }, status=404)
 
     user_obj = User.objects.get(id=user_id)
+    user_data = UserData.objects.get(user=user_obj)
+    if user_data.role == "system":
+        return JsonResponse({
+            "status": "Error",
+            "error": "This is a system managed account.",
+        }, status=403)
+
     if user_obj.id == request.user.id:
         return JsonResponse({
             "status": "Error",
@@ -259,7 +266,6 @@ def modify_user(request: WSGIRequest, user_id):
             "status": "Ok",
         }, status=200)
 
-    user_data = UserData.objects.get(user=user_obj)
 
     if request.method == "GET":
         return JsonResponse({

@@ -121,6 +121,8 @@ def discord_callback(request):
 
     if UserData.objects.filter(oauth_id=user_info["id"], oauth_provider="discord").exists():
         user_data = UserData.objects.get(oauth_id=user_info["id"], oauth_provider="discord")
+        if user_data.role == "system":
+            return JsonResponse({"error": "This is a system managed account"}, status=403)
 
         bans = check_for_bans(user_data)
         if bans:
@@ -169,6 +171,8 @@ def login(request: WSGIRequest):
     if login_method == "telegram":
         if UserData.objects.filter(oauth_id=body.get("id"), oauth_provider="telegram").exists():
             user_data = UserData.objects.get(oauth_id=body.get("id"), oauth_provider="telegram")
+            if user_data.role == "system":
+                return JsonResponse({"error": "This is a system managed account"}, status=403)
             bans = check_for_bans(user_data)
             if bans:
                 return bans
@@ -200,6 +204,8 @@ def login(request: WSGIRequest):
     user = authenticate(request, username=body.get("username"), password=body.get("password"))
     if user is not None:
         user_data = UserData.objects.get(user=user)
+        if user_data.role == "system":
+            return JsonResponse({"error": "This is a system managed account"}, status=403)
         bans = check_for_bans(user_data)
         if bans:
             return bans
@@ -207,15 +213,15 @@ def login(request: WSGIRequest):
             return JsonResponse({"error": "Your account has been locked for security reasons. Please reset your password"}, status=423)
         auth_login(request, user)
         client_ip = utils.get_client_ip(request)
-        failed_attempts = user_data.login_failed_ips.get(client_ip, None)
-        if failed_attempts is not None:
-            user_data.login_failed_ips[client_ip] = 0
+        user_data.login_failed_ips.pop(client_ip, None)
         user_data.save()
         return JsonResponse({"status": "Ok"}, status=200)
     else:
         try:
             user = User.objects.get(username=body.get("username"))
             user_data = UserData.objects.get(user=user)
+            if user_data.role == "system":
+                return JsonResponse({"error": "This is a system managed account"}, status=403)
             bans = check_for_bans(user_data)
             if bans:
                 return bans
@@ -231,7 +237,12 @@ def login(request: WSGIRequest):
             user_data.refresh_from_db()
             failed_attempts = user_data.login_failed_ips[client_ip]
             if failed_attempts >= PASSWORD_ATTEMPT_BAN_LIMIT:
-                ban = Ban.objects.create(reason="Too many unsuccessful login attempts.", expires_at=timezone.now() + timedelta(minutes=10))
+                system_user = User.objects.get(username="system")
+                ban = Ban.objects.create(
+                    reason="Too many unsuccessful login attempts.",
+                    expires_at=timezone.now() + timedelta(minutes=10),
+                    banned_by=system_user,
+                )
                 user_data.bans.add(ban)
                 user_data.login_failed_ips[client_ip] = 10
                 user_data.save()
