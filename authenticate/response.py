@@ -33,6 +33,7 @@ def check_for_bans(user_data):
                     "reason": i.reason,
                     "expires_at": i.expires_at,
                     "is_active": (not i.lifted) and (i.expires_at is None or i.expires_at > timezone.now()),
+                    "banned_by": UserData.objects.get(user=i.banned_by).display_name or ("@" + i.banned_by.username) if i.banned_by else "Deleted user",
                 } for i in user_data.bans.filter(Q(lifted=False) & (Q(expires_at__gt=timezone.now()) | Q(expires_at__isnull=True)))
             ]
         }, status=403)

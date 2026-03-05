@@ -333,6 +333,7 @@ def bans(request: WSGIRequest, user_id):
                         if i.lifted_by else "Deleted user"
                         if i.lifted else ""
                     ),
+                    "banned_by": UserData.objects.get(user=i.banned_by).display_name or ("@" + i.banned_by.username) if i.banned_by else "Deleted user",
                 }
                 for i in bans_qs.order_by("expires_at")
             ]
@@ -391,6 +392,7 @@ def ban_user(request: WSGIRequest, user_id):
         reason=ban_reason,
         expires_at=expires_at_date,
         can_be_lifted=True,
+        banned_by=request.user,
     )
 
     _logout_user(user_id)
