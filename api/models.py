@@ -101,7 +101,9 @@ class Ban(models.Model):
     reason = models.TextField(max_length=255)
     expires_at = models.DateTimeField(null=True, blank=True)
     can_be_lifted = models.BooleanField(default=False)
-    banned_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)
+    lifted = models.BooleanField(default=False)
+    lifted_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name="lifted_by")
+    banned_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name="banned_by")
 
 
 class OAUTHCode(models.Model):

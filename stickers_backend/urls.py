@@ -58,7 +58,7 @@ def asd():
     asd
 
 urlpatterns = [
-    path('admin/', admin.site.urls),
+    path('django-admin/', admin.site.urls),
     path('api/', include('api.urls')),
     path("asd", asd)
 

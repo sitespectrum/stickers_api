@@ -23,7 +23,7 @@ import uuid
 
 
 def check_for_bans(user_data):
-    if user_data.bans.filter(Q(expires_at__gt=timezone.now()) | Q(expires_at__isnull=True)).exists():
+    if user_data.bans.filter(Q(lifted=False) & (Q(expires_at__gt=timezone.now()) | Q(expires_at__isnull=True))).exists():
         return JsonResponse({
             "reason": "banned",
             "error": "You are currently banned.",
@@ -32,8 +32,8 @@ def check_for_bans(user_data):
                     "id": i.id,
                     "reason": i.reason,
                     "expires_at": i.expires_at,
-                    "is_active": i.expires_at > timezone.now() if i.expires_at else True,
-                } for i in user_data.bans.filter((Q(expires_at__gt=timezone.now()) | Q(expires_at=None)))
+                    "is_active": (not i.lifted) and (i.expires_at is None or i.expires_at > timezone.now()),
+                } for i in user_data.bans.filter(Q(lifted=False) & (Q(expires_at__gt=timezone.now()) | Q(expires_at__isnull=True)))
             ]
         }, status=403)
     return None
