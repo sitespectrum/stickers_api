@@ -16,8 +16,11 @@ Including another URLconf
 """
 from django.conf.urls import handler404, handler400, handler403, handler500
 from django.contrib import admin
-from django.http import JsonResponse
+from django.core.files.storage import default_storage
+from django.http import JsonResponse, FileResponse, Http404
 from django.urls import path, include
+
+from api.models import S3File
 from modules import startup_tasks
 
 
@@ -54,13 +57,11 @@ handler500 = "stickers_backend.urls.error500"
 handler400 = "stickers_backend.urls.error400"
 handler403 = "stickers_backend.urls.error403"
 
-def asd():
-    asd
 
 urlpatterns = [
     path('django-admin/', admin.site.urls),
     path('api/', include('api.urls')),
-    path("asd", asd)
+
 
 ]
 

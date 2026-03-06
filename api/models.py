@@ -1,9 +1,11 @@
 import datetime
+import uuid
+from pathlib import Path
 from time import timezone
 
 from django.db import models
 from django.contrib.auth.models import User
-from django.db.models import ManyToManyField, SET_NULL, OneToOneField
+from django.db.models import ManyToManyField, SET_NULL, OneToOneField, FileField
 
 from django.db.models.signals import post_delete
 from django.dispatch import receiver
@@ -46,6 +48,10 @@ ERROR_SEVERITIES = (
     ("info", "Information"),
     ("unknown", "Unknown")
 )
+
+def upload_to(instance, filename):
+    ext = Path(filename).suffix
+    return f"{uuid.uuid4()}{ext}"
 
 
 class Note(models.Model):
@@ -148,6 +154,15 @@ class PasswordResetCode(models.Model):
 
     def __str__(self):
         return self.code
+
+
+class S3File(models.Model):
+    file = FileField(upload_to=upload_to)
+    name = models.CharField(max_length=255)
+    owner = models.ForeignKey(User, on_delete=models.CASCADE)
+
+    def __str__(self):
+        return self.name
 
 
 class File(models.Model):
