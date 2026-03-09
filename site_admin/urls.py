@@ -7,7 +7,7 @@ urlpatterns = [
     path('reset', response.reset_warning_status),
     path('status', response.get_status),
     path('status/<str:status>', response.set_service_status),
-    path('update', response.update),
+    # path('update', response.update),
     path('log', response.create_log),
     path('users/all', response.get_users),
     path('users/create', response.create_user),
