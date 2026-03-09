@@ -312,7 +312,7 @@ def modify_user(request: WSGIRequest, user_id):
 @utils.fallback_protected()
 @wrappers.login_required()
 @wrappers.require_role(["owner", "moderator"])
-@require_http_methods(["GET", "POST", "DELETE"])
+@require_http_methods(["GET"])
 def bans(request: WSGIRequest, user_id):
     if not User.objects.filter(id=user_id).exists():
         return JsonResponse({
@@ -364,6 +364,16 @@ def ban_user(request: WSGIRequest, user_id):
             "error": "User does not exists.",
         }, status=404)
     user_data = UserData.objects.get(user=User.objects.get(id=user_id))
+    if user_data.role == "owner":
+        return JsonResponse({
+            "status": "Error",
+            "error": "You cannot ban an owner",
+        }, status=403)
+    if user_data.role == "system":
+        return JsonResponse({
+            "status": "Error",
+            "error": "You cannot ban a system user",
+        }, status=403)
     try:
         body = json.loads(request.body)
     except json.decoder.JSONDecodeError:
