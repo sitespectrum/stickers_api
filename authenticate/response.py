@@ -184,7 +184,7 @@ def login(request: WSGIRequest):
             if User.objects.filter(username=body.get("username")).exists():
                 return JsonResponse({
                     "reason": "register_failed",
-                    "error": "A user with this username already exists in our service. Please try anther authentication method."
+                    "error": "A user with this username already exists in our service. Please try another authentication method."
                 }, status=409)
             user = User.objects.create(
                 username=body.get("username"),

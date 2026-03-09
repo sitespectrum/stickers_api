@@ -10,7 +10,7 @@ urlpatterns = [
     # path('update', response.update),
     path('log', response.create_log),
     path('users/all', response.get_users),
-    path('users/create', response.create_user),
+    # path('users/create', response.create_user),
     path('users/roles', response.get_roles),
     path('users/<int:user_id>', response.modify_user),
     path('users/<int:user_id>/bans', response.bans),
