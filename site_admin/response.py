@@ -173,13 +173,13 @@ def create_log(request: WSGIRequest):
 @wrappers.require_role(["owner", "moderator"])
 @require_http_methods(["GET"])
 def get_users(request: WSGIRequest):
-    users = User.objects.filter(~Q(id=request.user.id))
+    users = UserData.objects.filter(~Q(user=request.user) & ~Q(role="system"))
     user_list = []
     for user in users:
         user_list.append({
-            "id": user.id,
-            "username": user.username,
-            "role": UserData.objects.get(user=user).role,
+            "id": user.user.id,
+            "username": user.user.username,
+            "role": user.role,
         })
     return JsonResponse({
         "status": "Ok",
@@ -224,12 +224,14 @@ def create_user(request: WSGIRequest):
 @utils.panic_protected()
 @utils.fallback_protected()
 @wrappers.login_required()
-@wrappers.require_role(["owner"])
+@wrappers.require_role(["owner", "moderator"])
 @require_http_methods(["GET"])
 def get_roles(request: WSGIRequest):
+    roles = dict(ROLE_CHOICES)
+    roles.pop("system", None)
     return JsonResponse({
         "status": "Ok",
-        "roles": dict(ROLE_CHOICES),
+        "roles": roles
     }, status=200)
 
 
@@ -248,6 +250,7 @@ def modify_user(request: WSGIRequest, user_id):
 
     user_obj = User.objects.get(id=user_id)
     user_data = UserData.objects.get(user=user_obj)
+    current_user = UserData.objects.get(user=request.user)
     if user_data.role == "system":
         return JsonResponse({
             "status": "Error",
@@ -281,10 +284,16 @@ def modify_user(request: WSGIRequest, user_id):
     except json.decoder.JSONDecodeError:
         return JsonResponse({"status": "Bad Request"}, status=400)
 
-    if user_data.role != "owner":
+    if current_user.role != "owner":
         return JsonResponse({
             "status": "Error",
             "error": "You cannot change user data",
+        }, status=403)
+
+    if body.get("role") == "system":
+        return JsonResponse({
+            "status": "Error",
+            "error": "This role cannot be assigned",
         }, status=403)
 
     if body.get("password"):
