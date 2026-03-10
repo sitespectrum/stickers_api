@@ -26,6 +26,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = os.getenv("DJANGO_SECRET")
 PASSWORD_ATTEMPT_LIMIT = int(os.getenv("PASSWORD_ATTEMPT_LIMIT"))
+PASSWORD_ATTEMPT_BAN_LIMIT = int(os.getenv("PASSWORD_ATTEMPT_BAN_LIMIT"))
 TURNSTILE_SECRET = os.getenv("TURNSTILE_SECRET")
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 GIT_USERNAME = os.getenv("GIT_USERNAME")
@@ -36,6 +37,20 @@ DISCORD_ID = os.getenv("DISCORD_CLIENT_ID")
 DISCORD_REDIRECT = os.getenv("DISCORD_REDIRECT")
 DISCORD_CALLBACK = os.getenv("DISCORD_CALLBACK")
 FRONTEND_URL = os.getenv("FRONTEND_URL") or ""
+MAX_UPLOAD_SIZE = int(os.getenv("MAX_UPLOAD_SIZE"))
+MAX_USER_STORAGE = int(os.getenv("MAX_USER_STORAGE"))
+
+AWS_ACCESS_KEY_ID = os.environ["AWS_ACCESS_KEY_ID"]
+AWS_SECRET_ACCESS_KEY = os.environ["AWS_SECRET_ACCESS_KEY"]
+AWS_STORAGE_BUCKET_NAME = os.environ["AWS_STORAGE_BUCKET_NAME"]
+
+AWS_S3_ENDPOINT_URL = os.environ["AWS_S3_ENDPOINT_URL"]
+
+AWS_DEFAULT_ACL = None
+AWS_QUERYSTRING_AUTH = False
+AWS_S3_FILE_OVERWRITE = False
+AWS_S3_ADDRESSING_STYLE = "path"
+MEDIA_URL = f"{AWS_S3_ENDPOINT_URL}/{AWS_STORAGE_BUCKET_NAME}/"
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.getenv("DEBUG") == "1"
@@ -102,9 +117,15 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'corsheaders',
+    'django_extensions',
+    'storages',
     'api',
     'authenticate',
-    'site_admin'
+    'site_admin',
+    'notes',
+    'bookmarks',
+    'media',
+    'django_cleanup.apps.CleanupConfig',
 ]
 
 USE_X_FORWARDED_HOST = True
@@ -155,6 +176,17 @@ DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',
         'NAME': BASE_DIR / 'db.sqlite3',
+    }
+}
+
+STORAGES = {
+    "default": {
+        "BACKEND": "storages.backends.s3.S3Storage",
+        "OPTIONS": {
+        },
+    },
+    "staticfiles": {
+        "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage",
     }
 }
 

@@ -170,16 +170,16 @@ def create_log(request: WSGIRequest):
 @utils.panic_protected()
 @utils.fallback_protected()
 @wrappers.login_required()
-@wrappers.require_role(["owner"])
+@wrappers.require_role(["owner", "moderator"])
 @require_http_methods(["GET"])
 def get_users(request: WSGIRequest):
-    users = User.objects.filter(~Q(id=request.user.id))
+    users = UserData.objects.filter(~Q(user=request.user) & ~Q(role="system"))
     user_list = []
     for user in users:
         user_list.append({
-            "id": user.id,
-            "username": user.username,
-            "role": dict(ROLE_CHOICES)[UserData.objects.get(user=user).role],
+            "id": user.user.id,
+            "username": user.user.username,
+            "role": user.role,
         })
     return JsonResponse({
         "status": "Ok",
@@ -224,18 +224,14 @@ def create_user(request: WSGIRequest):
 @utils.panic_protected()
 @utils.fallback_protected()
 @wrappers.login_required()
-@wrappers.require_role(["owner"])
+@wrappers.require_role(["owner", "moderator"])
 @require_http_methods(["GET"])
 def get_roles(request: WSGIRequest):
-    obj_list = []
-    for role in ROLE_CHOICES:
-        obj_list.append({
-            "name": role[1],
-            "code": role[0],
-        })
+    roles = dict(ROLE_CHOICES)
+    roles.pop("system", None)
     return JsonResponse({
         "status": "Ok",
-        "roles": obj_list,
+        "roles": roles
     }, status=200)
 
 
@@ -243,8 +239,8 @@ def get_roles(request: WSGIRequest):
 @utils.safe_protected()
 @utils.fallback_protected()
 @wrappers.login_required()
-@wrappers.require_role(["owner"])
-@require_http_methods(["POST", "DELETE", "GET"])
+@wrappers.require_role(["owner", "moderator"])
+@require_http_methods(["POST", "GET"])
 def modify_user(request: WSGIRequest, user_id):
     if not User.objects.filter(id=user_id).exists():
         return JsonResponse({
@@ -253,26 +249,26 @@ def modify_user(request: WSGIRequest, user_id):
         }, status=404)
 
     user_obj = User.objects.get(id=user_id)
+    user_data = UserData.objects.get(user=user_obj)
+    current_user = UserData.objects.get(user=request.user)
+    if user_data.role == "system":
+        return JsonResponse({
+            "status": "Error",
+            "error": "This is a system managed account.",
+        }, status=403)
+
     if user_obj.id == request.user.id:
         return JsonResponse({
             "status": "Error",
             "error": "You cannot modify yourself.",
         }, status=400)
 
-    if request.method == "DELETE":
-        user_obj.delete()
-        return JsonResponse({
-            "status": "Ok",
-        }, status=200)
-
-    user_data = UserData.objects.get(user=user_obj)
-
     if request.method == "GET":
         return JsonResponse({
             "status": "Ok",
             "id": user_obj.id,
             "username": user_obj.username,
-            "role": dict(ROLE_CHOICES)[user_data.role],
+            "role": user_data.role,
             "display_name": user_data.display_name,
             "email": user_obj.email,
             "stickers": user_data.sticker_packs.count(),
@@ -280,13 +276,25 @@ def modify_user(request: WSGIRequest, user_id):
             "login_method": dict(OAUTH_PROVIDERS)[user_data.oauth_provider],
             "login_method_code": user_data.oauth_provider,
             "total_bans": len(user_data.bans.all()),
-            "active_bans": len(user_data.bans.filter(Q(expires_at__gt=timezone.now()) | Q(expires_at=None))),
+            "active_bans": len(user_data.bans.filter(Q(lifted=False) & (Q(expires_at__gt=timezone.now()) | Q(expires_at__isnull=True)))),
         })
 
     try:
         body = json.loads(request.body)
     except json.decoder.JSONDecodeError:
         return JsonResponse({"status": "Bad Request"}, status=400)
+
+    if current_user.role != "owner":
+        return JsonResponse({
+            "status": "Error",
+            "error": "You cannot change user data",
+        }, status=403)
+
+    if body.get("role") == "system":
+        return JsonResponse({
+            "status": "Error",
+            "error": "This role cannot be assigned",
+        }, status=403)
 
     if body.get("password"):
         user_obj.set_password(body["password"])
@@ -303,8 +311,8 @@ def modify_user(request: WSGIRequest, user_id):
 @utils.panic_protected()
 @utils.fallback_protected()
 @wrappers.login_required()
-@wrappers.require_role(["owner"])
-@require_http_methods(["GET", "POST", "DELETE"])
+@wrappers.require_role(["owner", "moderator"])
+@require_http_methods(["GET"])
 def bans(request: WSGIRequest, user_id):
     if not User.objects.filter(id=user_id).exists():
         return JsonResponse({
@@ -314,6 +322,12 @@ def bans(request: WSGIRequest, user_id):
     user_data = UserData.objects.get(user=User.objects.get(id=user_id))
     if request.method == "GET":
         only_active = request.GET.get("active_only", "false").lower() == "true"
+
+        now = timezone.now()
+        active_q = Q(lifted=False) & (Q(expires_at__gt=now) | Q(expires_at__isnull=True))
+
+        bans_qs = user_data.bans.filter(active_q) if only_active else user_data.bans.all()
+
         return JsonResponse({
             "status": "Ok",
             "bans": [
@@ -321,8 +335,16 @@ def bans(request: WSGIRequest, user_id):
                     "id": i.id,
                     "reason": i.reason,
                     "expires_at": i.expires_at,
-                    "is_active": i.expires_at > timezone.now() if i.expires_at else True,
-                } for i in user_data.bans.filter((Q(expires_at__gt=timezone.now()) | Q(expires_at=None)) if only_active else Q()).order_by("expires_at")
+                    "is_active": (not i.lifted) and (i.expires_at is None or i.expires_at > now),
+                    "can_be_revoked": i.can_be_lifted,
+                    "lifted_by": (
+                        (UserData.objects.get(user=i.lifted_by).display_name or ("@" + i.lifted_by.username))
+                        if i.lifted_by else "Deleted user"
+                        if i.lifted else ""
+                    ),
+                    "banned_by": UserData.objects.get(user=i.banned_by).display_name or ("@" + i.banned_by.username) if i.banned_by else "Deleted user",
+                }
+                for i in bans_qs.order_by("expires_at")
             ]
         })
     return JsonResponse({
@@ -333,7 +355,76 @@ def bans(request: WSGIRequest, user_id):
 @utils.panic_protected()
 @utils.fallback_protected()
 @wrappers.login_required()
-@wrappers.require_role(["owner"])
+@wrappers.require_role(["owner", "moderator"])
+@require_http_methods(["POST", "DELETE"])
+def ban_user(request: WSGIRequest, user_id):
+    if not User.objects.filter(id=user_id).exists():
+        return JsonResponse({
+            "status": "Error",
+            "error": "User does not exists.",
+        }, status=404)
+    user_data = UserData.objects.get(user=User.objects.get(id=user_id))
+    if user_data.role == "owner":
+        return JsonResponse({
+            "status": "Error",
+            "error": "You cannot ban an owner",
+        }, status=403)
+    if user_data.role == "system":
+        return JsonResponse({
+            "status": "Error",
+            "error": "You cannot ban a system user",
+        }, status=403)
+    try:
+        body = json.loads(request.body)
+    except json.decoder.JSONDecodeError:
+        return JsonResponse({"status": "Bad Request"}, status=400)
+    if request.method == "DELETE":
+        if not user_data.bans.filter(id=body["ban_id"]).exists():
+            return JsonResponse({
+                "status": "Error",
+                "error": "Ban does not exists",
+            }, status=404)
+        ban = user_data.bans.get(id=body["ban_id"])
+        if not ban.can_be_lifted:
+            return JsonResponse({
+                "status": "Error",
+                "error": "This ban cannot be lifted",
+            }, status=403)
+        ban.lifted = True
+        ban.lifted_by = request.user
+        ban.save()
+        user_data.save()
+        return JsonResponse({
+            "status": "Ok",
+        }, status=200)
+    expires_at_date = datetime.fromisoformat(body.get("expires_at")).date() if body.get("expires_at") else None
+    if expires_at_date:
+        expires_at_date = timezone.make_aware(datetime.combine(expires_at_date, datetime.min.time()))
+    ban_reason = body.get("reason") or "Banned by moderator"
+    if expires_at_date:
+        if expires_at_date < timezone.now():
+            return JsonResponse({
+                "status": "Error",
+                "error": "Expiry date must be in the future.",
+            }, status=400)
+    user_data.bans.create(
+        reason=ban_reason,
+        expires_at=expires_at_date,
+        can_be_lifted=True,
+        banned_by=request.user,
+    )
+
+    _logout_user(user_id)
+
+    return JsonResponse({
+        "status": "Ok",
+    }, status=200)
+
+
+@utils.panic_protected()
+@utils.fallback_protected()
+@wrappers.login_required()
+@wrappers.require_role(["owner", "moderator"])
 @require_http_methods(["GET"])
 def search_users(request: WSGIRequest):
     users = User.objects.filter(username__icontains=request.GET.get("q", ""))
@@ -358,7 +449,7 @@ def _logout_user(user_id):
 @utils.fallback_protected()
 @utils.safe_protected()
 @wrappers.login_required()
-@wrappers.require_role(["owner"])
+@wrappers.require_role(["owner", "moderator"])
 @require_http_methods(["POST"])
 def logout_user(request: WSGIRequest):
     try:

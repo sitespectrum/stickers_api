@@ -1,8 +1,11 @@
 import datetime
+import uuid
+from pathlib import Path
+from time import timezone
 
 from django.db import models
 from django.contrib.auth.models import User
-from django.db.models import ManyToManyField, SET_NULL, OneToOneField
+from django.db.models import ManyToManyField, SET_NULL, OneToOneField, FileField
 
 from django.db.models.signals import post_delete
 from django.dispatch import receiver
@@ -14,6 +17,7 @@ ROLE_CHOICES = (
     ("admin", "Admin"),
     ("moderator", "Moderator"),
     ('user', 'User'),
+    ('system', 'System'),
 )
 
 OAUTH_PROVIDERS = (
@@ -26,7 +30,7 @@ FILE_TYPES = (
     ("image", "Image"),
     ("document", "Document"),
     ("application_info", "Application Info"),
-    ("release", "Release notes"),
+    ("release", "Release file"),
 )
 
 ANNOUNCEMENT_TYPES = (
@@ -44,6 +48,28 @@ ERROR_SEVERITIES = (
     ("info", "Information"),
     ("unknown", "Unknown")
 )
+
+def upload_to(instance, filename):
+    ext = Path(filename).suffix
+    return f"{uuid.uuid4()}{ext}"
+
+
+class Note(models.Model):
+    name = models.CharField(max_length=255)
+    content = models.TextField()
+    owner = models.ForeignKey(User, on_delete=models.CASCADE)
+
+    def __str__(self):
+        return self.name
+
+
+class Bookmark(models.Model):
+    name = models.CharField(max_length=255)
+    url = models.URLField()
+    owner = models.ForeignKey(User, on_delete=models.CASCADE)
+
+    def __str__(self):
+        return self.name
 
 
 class Sticker(models.Model):
@@ -80,6 +106,17 @@ def delete_stickers_on_pack_delete(sender, instance, **kwargs):
 class Ban(models.Model):
     reason = models.TextField(max_length=255)
     expires_at = models.DateTimeField(null=True, blank=True)
+    can_be_lifted = models.BooleanField(default=False)
+    lifted = models.BooleanField(default=False)
+    lifted_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name="lifted_by")
+    banned_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name="banned_by")
+
+
+class OAUTHCode(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    code = models.CharField(max_length=255)
+    challenge = models.CharField(max_length=255)
+    expires_at = models.DateTimeField()
 
 
 class UserData(models.Model):
@@ -94,6 +131,8 @@ class UserData(models.Model):
     oauth_id = models.CharField(max_length=255, blank=True, null=True)
     oauth_provider = models.CharField(max_length=255, choices=OAUTH_PROVIDERS, default="builtin")
     bans = ManyToManyField(to=Ban, blank=True)
+    login_failed_ips = models.JSONField(default=dict)
+    used_storage = models.BigIntegerField(default=0)
 
     def __str__(self):
         return f"{self.user.username}'s user data"
@@ -116,6 +155,15 @@ class PasswordResetCode(models.Model):
 
     def __str__(self):
         return self.code
+
+
+class S3File(models.Model):
+    file = FileField(upload_to=upload_to)
+    name = models.CharField(max_length=255)
+    owner = models.ForeignKey(User, on_delete=models.CASCADE)
+
+    def __str__(self):
+        return self.name
 
 
 class File(models.Model):
@@ -156,7 +204,7 @@ class ErrorLog(models.Model):
 class Release(models.Model):
     version = models.CharField(max_length=255)
     release_date = models.DateField(blank=True, null=True, default=None)
-    release_note_file = models.ForeignKey(File, on_delete=models.SET_NULL, default=None, null=True, blank=True)
+    release_file = models.ForeignKey(File, on_delete=models.SET_NULL, default=None, null=True, blank=True)
 
     def __str__(self):
         return f"{self.version}"

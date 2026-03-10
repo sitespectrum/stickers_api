@@ -1,0 +1,403 @@
+/api:
+  /admin:
+    /logs/<int:log_id>:
+      method: GET
+      description: Get a specific log
+      request_body: { }
+      response:
+        id: number
+        type: string
+        message: string
+        traceback: string
+        severity: string
+        panicked: boolean
+        time: string
+        timestamp: timestamp
+
+    /logs/all?page=<int:page>:
+      method: GET
+      description: Get all logs
+      request_body: { }
+      response:
+        logs:
+          - id: number
+            title: string
+            severity: string
+        pages: number
+        page: number
+
+    /reset:
+      method: GET
+      description: Reset service status
+      request_body: { }
+      response: { }
+
+    /status:
+      method: GET
+      description: Get service status
+      request_body: { }
+      response:
+        server_operation_title: string
+        server_operation_code: string
+        statuses: json
+
+    /status/<str:status>:
+      method: POST
+      description: Set service status (must be one from statuses object)
+      request_body: { }
+      response: { }
+
+    /users:
+      /all:
+        method: GET
+        description: Get all users
+        request_body: { }
+        response:
+          users:
+            - id: number
+              username: string
+              role: string
+
+      /roles:
+        method: GET
+        description: Get available roles as key-value pairs
+        request_body: { }
+        response:
+          roles:
+            role_name: role_title
+
+      /search?q=<str:query>:
+        method: GET
+        description: Search users by username substring
+        request_body:
+          query: string
+        response:
+          users:
+            - id: number
+              username: string
+              role: string
+
+      /logout:
+        method: POST
+        description: Force a user to logout
+        request_body:
+          user_id: number
+        response: { }
+
+      /<int:user_id>:
+        method: [POST, GET]
+        description: Modify or fetch a user
+        GET:
+          request_body: { }
+          response:
+            id: number
+            username: string
+            role: string
+            display_name: string
+            email: string
+            stickers: number
+            favourites: number
+            login_method: string
+            login_method_code: string
+            total_bans: number
+            active_bans: number
+
+      /<int:user_id>/ban:
+        method: [POST, DELETE]
+        description: Ban or unban a user
+        POST:
+          request_body:
+            expires_at: timestamp | null
+            reason: string | null
+          response: { }
+        DELETE:
+          request_body: { }
+          response: { }
+
+      /<int:user_id>/bans:
+        method: GET
+        description: Get user bans
+        request_body: { }
+        response:
+          bans:
+            - id: number
+              reason: string
+              expires_at: timestamp
+              is_active: boolean
+              can_be_revoked: boolean
+              lifted_by: string
+              banned_by: string
+
+  /auth:
+    /login:
+      method: POST
+      description: Log in (Telegram auto initializes user if missing)
+      request_body:
+        login_method: builtin | telegram
+        # Below are only used for builtin login
+        username: string
+        password: string
+        # Below are only used for telegram login
+        id: string
+        first_name: string
+        last_name: string
+        photo_url: string
+      response: { }
+
+    /login/discord:
+      method: POST
+      description: Discord OAuth login (auto-register if missing)
+      request_body:
+        code: string
+      response: { }
+
+    /logout:
+      method: GET
+      description: Log out current session
+      request_body: { }
+      response: { }
+
+    /register:
+      method: POST
+      description: Register a new user
+      request_body:
+        username: string
+        email: string
+        password: string
+        cf-turnstile-response: string
+      response: { }
+
+    /oauth:
+      /get_code:
+        method: POST
+        description: Get OAuth code
+        request_body:
+          challenge: string
+        response:
+          code: string
+
+      /validate_code:
+        method: POST
+        description: Validate OAuth code (logs user in)
+        request_body:
+          code: string
+          code_verifier: string
+        response: { }
+
+    /profile:
+      /me:
+        method: GET
+        description: Get current user profile
+        request_body: { }
+        response:
+          username: string
+          display_name: string
+          role: string
+          email: string
+          profile_pic: string
+          login_method: string
+
+      /change:
+        method: PATCH
+        description: Update profile (only provided fields change)
+        request_body:
+          password: string
+          display_name: string
+          email: string
+          pfp_link: string
+        response: { }
+
+      /change/display_name:
+        method: PATCH
+        description: Change display name
+        request_body:
+          display_name: string
+        response: { }
+
+      /change/email:
+        method: PATCH
+        description: Change email
+        request_body:
+          email: string
+        response: { }
+
+      /change/password:
+        method: PATCH
+        description: Change password
+        request_body:
+          password: string
+        response: { }
+
+  /bookmarks:
+    /all:
+      method: GET
+      description: Get all bookmarks
+      request_body:
+        bookmarks:
+          - id: number
+            name: string
+            url: string
+      response: { }
+
+    /get/<int:bookmark_id>:
+      method: GET
+      description: Get bookmark by ID
+      request_body:
+        bookmark:
+          id: number
+          name: string
+          url: string
+      response: { }
+
+    /save/<int:bookmark_id>:
+      method: POST
+      description: Save bookmark
+      request_body:
+        name: string
+        url: string
+      response: { }
+
+    /delete/<int:bookmark_id>:
+      method: DELETE
+      description: Delete bookmark
+      request_body: { }
+      response: { }
+
+  /media:
+    /files:
+      method: GET
+      description: Get all media files
+      request_body:
+        files:
+          - id: number
+            name: string
+      response: { }
+
+    /upload:
+      method: POST
+      description: Upload a file
+      request_body: binary
+      response: { }
+
+    /get/<str:filename>:
+      method: GET
+      description: Get media file
+      request_body: { }
+      response: binary
+
+    /delete/<int:file_id>:
+      method: DELETE
+      description: Delete media file
+      request_body: { }
+      response: { }
+
+  /notes:
+    /all:
+      method: GET
+      description: Get all notes
+      request_body:
+        id: number
+        name: string
+      response: { }
+
+    /get/<int:note_id>:
+      method: GET
+      description: Get note by ID
+      request_body:
+        id: number
+        name: string
+        content: string
+      response: { }
+
+    /save/<int:note_id>:
+      method: POST
+      description: Save note
+      request_body:
+        name: string
+        content: string
+      response: { }
+
+    /delete/<int:note_id>:
+      method: DELETE
+      description: Delete note
+      request_body: { }
+      response: { }
+
+  /stickers:
+    /get_packs:
+      method: GET
+      description: Get sticker packs
+      request_body: { }
+      response:
+        packs:
+          - name: string
+            title: string
+            thumbnail_id: id
+
+    /get_pack/<str:pack_name>:
+      method: GET
+      description: Get a specific sticker pack
+      request_body: { }
+      response:
+        name: string
+        title: string
+        thumbnail: number
+        stickers:
+          - id: number
+            emoji: string
+            is_video: boolean
+            is_animated: boolean
+
+    /add_pack:
+      method: POST
+      description: Add sticker pack to user
+      request_body:
+        pack_name: string
+      response: { }
+
+    /update_pack:
+      method: PATCH
+      description: Update sticker pack on server
+      request_body:
+        pack_name: string
+      response: { }
+
+    /remove_pack/<str:pack_name>:
+      method: DELETE
+      description: Remove sticker pack from user
+      request_body: { }
+      response: { }
+
+    /get_sticker/<int:sticker_id>:
+      method: GET
+      description: Get a sticker
+      request_body: { }
+      response: binary
+
+    /favourites:
+      method: [GET, POST]
+      description: Get or toggle favourite stickers
+      GET:
+        request_body: { }
+        response:
+          stickers:
+            - id: number
+              emoji: string
+              is_video: boolean
+              is_animated: boolean
+      POST:
+        request_body:
+          sticker_id: number
+        response: { }
+
+    /stats:
+      method: GET
+      description: Get sticker statistics
+      request_body: { }
+      response:
+        most_used_packs: [string]
+        recently_added: [string]
+        total_packs: number
+        total_stickers: number
+        favourite_stickers: number
+        sticker_packs: number
