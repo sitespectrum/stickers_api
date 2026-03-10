@@ -40,7 +40,7 @@ def upload_file(request: WSGIRequest) -> JsonResponse:
                 'error': f'File {file.name} is too large',
             }, status=413)
         try:
-            if file.size + user_data.used_storage > MAX_USER_STORAGE:
+            if file.size + user_data.used_storage > MAX_USER_STORAGE*1024*1024:
                 return JsonResponse({
                     'status': 'Error',
                     'error': f'You have reached your storage limit',
@@ -74,6 +74,7 @@ def get_all_files(request: WSGIRequest):
             "name": i.name,
         } for i in S3File.objects.filter(owner=request.user)],
         "storage_used": UserData.objects.get(user=request.user).used_storage/1024/1024,
+        "max_storage": MAX_USER_STORAGE,
     })
 
 
