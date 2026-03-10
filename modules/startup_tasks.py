@@ -1,7 +1,7 @@
 from django.contrib.auth.models import User
 from django.core.management import call_command
 
-from api.models import UserData
+from api.models import UserData, S3File
 
 
 def run_startup_tasks():
@@ -18,3 +18,7 @@ def run_startup_tasks():
             is_locked=True,
             display_name='System',
         )
+
+    for i in UserData.objects.filter(used_storage=0):
+        i.used_storage = sum(x.file.size for x in S3File.objects.filter(owner=i.user))
+        i.save()

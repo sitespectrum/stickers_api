@@ -3,7 +3,7 @@ from django.db import IntegrityError
 from django.http import JsonResponse, FileResponse
 from django.views.decorators.http import require_GET, require_POST, require_http_methods
 
-from api.models import S3File
+from api.models import S3File, UserData
 from authenticate import wrappers
 from stickers_backend import utils
 from stickers_backend.settings import MAX_UPLOAD_SIZE
@@ -32,6 +32,7 @@ def get_file(request, filename):
 @require_POST
 @wrappers.login_required()
 def upload_file(request: WSGIRequest) -> JsonResponse:
+    user_data = UserData.objects.get(user=request.user)
     for file in request.FILES.getlist("file"):
         if file.size/1024/1024 > MAX_UPLOAD_SIZE:
             return JsonResponse({
@@ -45,6 +46,9 @@ def upload_file(request: WSGIRequest) -> JsonResponse:
                     'error': f'File {file.name} already exists',
                 }, status=400)
             S3File.objects.create(name=file.name, owner=request.user, file=file)
+            user_data.refresh_from_db()
+            user_data.used_storage += file.size
+            user_data.save()
         except IntegrityError:
             continue
 
@@ -73,5 +77,9 @@ def get_all_files(request: WSGIRequest):
 def delete_file(request: WSGIRequest, file_id):
     if not S3File.objects.filter(id=file_id, owner=request.user).exists():
         return JsonResponse({"error": "File not found"}, status=404)
-    S3File.objects.get(id=file_id).delete()
+    file_obj = S3File.objects.get(id=file_id)
+    user_data = UserData.objects.get(user=request.user)
+    user_data.used_storage -= file_obj.file.size
+    user_data.save()
+    file_obj.delete()
     return JsonResponse({"status": "Ok"}, status=200)
