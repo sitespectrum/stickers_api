@@ -6,7 +6,7 @@ from django.views.decorators.http import require_GET, require_POST, require_http
 from api.models import S3File, UserData
 from authenticate import wrappers
 from stickers_backend import utils
-from stickers_backend.settings import MAX_UPLOAD_SIZE
+from stickers_backend.settings import MAX_UPLOAD_SIZE, MAX_USER_STORAGE
 
 
 # Create your views here.
@@ -37,9 +37,14 @@ def upload_file(request: WSGIRequest) -> JsonResponse:
         if file.size/1024/1024 > MAX_UPLOAD_SIZE:
             return JsonResponse({
                 'status': 'Error',
-                'error': f'File {file.name} too large',
+                'error': f'File {file.name} is too large',
             }, status=413)
         try:
+            if file.size + user_data.used_storage > MAX_USER_STORAGE:
+                return JsonResponse({
+                    'status': 'Error',
+                    'error': f'You have reached your storage limit',
+                }, status=403)
             if S3File.objects.filter(name=file.name, owner=request.user).exists():
                 return JsonResponse({
                     'status': 'Error',
@@ -48,6 +53,8 @@ def upload_file(request: WSGIRequest) -> JsonResponse:
             S3File.objects.create(name=file.name, owner=request.user, file=file)
             user_data.refresh_from_db()
             user_data.used_storage += file.size
+            if user_data.used_storage < 0:
+                user_data.used_storage = 0
             user_data.save()
         except IntegrityError:
             continue
@@ -65,7 +72,8 @@ def get_all_files(request: WSGIRequest):
         "files": [{
             "id": i.id,
             "name": i.name,
-        } for i in S3File.objects.filter(owner=request.user)]
+        } for i in S3File.objects.filter(owner=request.user)],
+        "storage_used": UserData.objects.get(user=request.user).used_storage/1024/1024,
     })
 
 
