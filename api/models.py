@@ -125,7 +125,7 @@ class UserData(models.Model):
     role = models.CharField(max_length=255, choices=ROLE_CHOICES, default="user")
     unsuccessful_attempts = models.IntegerField(default=0)
     is_locked = models.BooleanField(default=False)
-    pfp_link = models.CharField(max_length=255, default="/person-fill.svg")
+    pfp_link = models.CharField(max_length=255, default="", null=True, blank=True)
     favourite_stickers = ManyToManyField(to=Sticker, blank=True)
     sticker_packs = ManyToManyField(to=StickerPack, blank=True)
     oauth_id = models.CharField(max_length=255, blank=True, null=True)
