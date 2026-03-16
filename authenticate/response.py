@@ -52,11 +52,11 @@ def validate_oauth_code(request: WSGIRequest):
 
     OAUTHCode.objects.filter(expires_at__lt=timezone.now()).delete()
     if not OAUTHCode.objects.filter(code=body.get("code")).exists():
-        return JsonResponse({"error": "Invalid code"}, status=400)
+        return JsonResponse({"error": "Invalid code"}, status=401)
 
     code_obj = OAUTHCode.objects.get(code=body.get("code"))
     if code_obj.challenge != hashlib.sha256(str(body.get("code_verifier")).encode("utf-8")).hexdigest():
-        return JsonResponse({"error": "Invalid code verifier"}, status=400)
+        return JsonResponse({"error": "Invalid code verifier"}, status=401)
 
     auth_login(request, code_obj.user)
     code_obj.delete()
@@ -87,7 +87,7 @@ def get_oauth_code(request: WSGIRequest):
         expires_at=timezone.now() + timedelta(minutes=10)
     )
 
-    return JsonResponse({"status": "Ok", "code": oauth_code}, status=200)
+    return JsonResponse({"status": "Ok", "code": oauth_code}, status=201)
 
 
 @require_http_methods(["POST"])
@@ -118,7 +118,7 @@ def discord_callback(request):
             headers={"Authorization": f"Bearer {token['access_token']}"}
         ).json()
     except KeyError:
-        return JsonResponse({"error": "Unable to login"}, status=400)
+        return JsonResponse({"error": "Unable to login"}, status=500)
 
     if UserData.objects.filter(oauth_id=user_info["id"], oauth_provider="discord").exists():
         user_data = UserData.objects.get(oauth_id=user_info["id"], oauth_provider="discord")
@@ -200,7 +200,7 @@ def login(request: WSGIRequest):
             )
             user_data.save()
             auth_login(request, user)
-            return JsonResponse({"status": "Ok"}, status=200)
+            return JsonResponse({"status": "Ok"}, status=201)
 
     user = authenticate(request, username=body.get("username"), password=body.get("password"))
     if user is not None:
@@ -251,7 +251,7 @@ def login(request: WSGIRequest):
                 time.sleep(failed_attempts)
         except User.DoesNotExist:
             pass
-        return JsonResponse({"error": "Invalid username or password"}, status=403)
+        return JsonResponse({"error": "Invalid username or password"}, status=401)
 
 
 @require_http_methods(["GET"])
@@ -306,13 +306,13 @@ def register(request: WSGIRequest):
 
     auth_login(request, new_user)
 
-    return JsonResponse({"status": "Ok"}, status=200)
+    return JsonResponse({"status": "Ok"}, status=201)
 
 
 @utils.panic_protected()
 @utils.safe_protected()
 @utils.fallback_protected()
-@require_http_methods(["POST"])
+@require_http_methods(["PATCH"])
 @wrappers.login_required()
 def change_email(request: WSGIRequest):
     try:
@@ -335,7 +335,7 @@ def change_email(request: WSGIRequest):
 @utils.panic_protected()
 @utils.safe_protected()
 @utils.fallback_protected()
-@require_http_methods(["POST"])
+@require_http_methods(["PATCH"])
 @wrappers.login_required()
 def change_password(request: WSGIRequest):
     try:
@@ -356,7 +356,7 @@ def change_password(request: WSGIRequest):
 @utils.panic_protected()
 @utils.safe_protected()
 @utils.fallback_protected()
-@require_http_methods(["POST"])
+@require_http_methods(["PATCH"])
 @wrappers.login_required()
 def change_display_name(request: WSGIRequest):
     try:
@@ -376,7 +376,7 @@ def change_display_name(request: WSGIRequest):
 @utils.panic_protected()
 @utils.safe_protected()
 @utils.fallback_protected()
-@require_http_methods(["POST"])
+@require_http_methods(["PATCH"])
 @wrappers.login_required()
 def update_profile(request: WSGIRequest):
     try:

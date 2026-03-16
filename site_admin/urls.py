@@ -2,7 +2,7 @@ from django.urls import path
 from site_admin import response
 
 urlpatterns = [
-    path('logs/all', response.get_all),
+    path('logs/all', response.get_all_logs),
     path('logs/<int:log_id>', response.get_log),
     path('reset', response.reset_warning_status),
     path('status', response.get_status),

@@ -50,9 +50,10 @@ def upload_file(request: WSGIRequest) -> JsonResponse:
                     'status': 'Error',
                     'error': f'File {file.name} already exists',
                 }, status=400)
-            S3File.objects.create(name=file.name, owner=request.user, file=file)
+            file_object = S3File.objects.create(name=file.name, owner=request.user, file=file)
+            file_object.save()
             user_data.refresh_from_db()
-            user_data.used_storage += file.size
+            user_data.used_storage += file_object.file.size
             if user_data.used_storage < 0:
                 user_data.used_storage = 0
             user_data.save()
@@ -91,4 +92,4 @@ def delete_file(request: WSGIRequest, file_id):
     user_data.used_storage -= file_obj.file.size
     user_data.save()
     file_obj.delete()
-    return JsonResponse({"status": "Ok"}, status=200)
+    return JsonResponse({"status": "Ok"}, status=204)
