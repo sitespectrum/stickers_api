@@ -250,7 +250,7 @@
       response: { }
 
     /save/<int:bookmark_id>:
-      method: POST
+      method: PUT
       description: Save bookmark
       request_body:
         name: string
@@ -310,7 +310,7 @@
       response: { }
 
     /save/<int:note_id>:
-      method: POST
+      method: PUT
       description: Save note
       request_body:
         name: string

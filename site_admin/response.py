@@ -21,7 +21,7 @@ from qsessions.models import Session
 
 @wrappers.login_required()
 @wrappers.require_role(["owner"])
-def get_all(request: WSGIRequest):
+def get_all_logs(request: WSGIRequest):
     page = request.GET.get("page", 1)
     try:
         page = int(page)
@@ -218,7 +218,7 @@ def create_user(request: WSGIRequest):
     return JsonResponse({
         "status": "Ok",
         "message": f"User {user.username} created successfully.",
-    }, status=200)
+    }, status=201)
 
 
 @utils.panic_protected()
@@ -240,7 +240,7 @@ def get_roles(request: WSGIRequest):
 @utils.fallback_protected()
 @wrappers.login_required()
 @wrappers.require_role(["owner", "moderator"])
-@require_http_methods(["POST", "GET"])
+@require_http_methods(["PATCH", "GET"])
 def modify_user(request: WSGIRequest, user_id):
     if not User.objects.filter(id=user_id).exists():
         return JsonResponse({
@@ -396,7 +396,7 @@ def ban_user(request: WSGIRequest, user_id):
         user_data.save()
         return JsonResponse({
             "status": "Ok",
-        }, status=200)
+        }, status=204)
     expires_at_date = datetime.fromisoformat(body.get("expires_at")).date() if body.get("expires_at") else None
     if expires_at_date:
         expires_at_date = timezone.make_aware(datetime.combine(expires_at_date, datetime.min.time()))
@@ -418,7 +418,7 @@ def ban_user(request: WSGIRequest, user_id):
 
     return JsonResponse({
         "status": "Ok",
-    }, status=200)
+    }, status=201)
 
 
 @utils.panic_protected()

@@ -21,6 +21,10 @@ TELEGRAM_API = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}"
 TELEGRAM_FILE = f"https://api.telegram.org/file/bot{TELEGRAM_TOKEN}"
 
 
+# Reuse a single session to enable connection pooling
+session = requests.Session()
+
+
 async def fetch_file(client: httpx.AsyncClient, file_id: str):
     r = await client.get(f"{TELEGRAM_API}/getFile?file_id={file_id}")
     if r.status_code != 200:
@@ -100,7 +104,7 @@ def add_sticker_pack(request: WSGIRequest, pack_name: str = None,):
     # Get pack info from Telegram
     r = httpx.get(f"{TELEGRAM_API}/getStickerSet?name={pack_name}", timeout=10)
     if r.status_code != 200:
-        return JsonResponse({"error": "Pack not found"}, status=404)
+        return JsonResponse({"error": "Pack not found on Telegram"}, status=404)
     data = r.json()["result"]
 
     # Run async thumbnail + sticker fetch concurrently
@@ -112,6 +116,9 @@ def add_sticker_pack(request: WSGIRequest, pack_name: str = None,):
             return thumb_result, stickers_result
 
     thumb_data, stickers = asyncio.run(gather_all())
+
+    if not stickers:
+        return JsonResponse({"error": "Pack is empty"}, status=404)
 
     if not thumb_data:
         return JsonResponse({"error": "Pack thumbnail not found"}, status=404)
@@ -136,6 +143,8 @@ def add_sticker_pack(request: WSGIRequest, pack_name: str = None,):
     sticker_objs = []
     for sticker in stickers:
         if not sticker:
+            continue
+        if sticker.get("is_animated", False) or sticker.get("is_video", False):
             continue
         sticker_objs.append(Sticker(
             emoji=sticker.get("emoji", ""),
@@ -176,7 +185,7 @@ def update_pack(request: WSGIRequest):
     sticker_pack = StickerPack.objects.get(name=pack_name)
     r = httpx.get(f"{TELEGRAM_API}/getStickerSet?name={sticker_pack.name}", timeout=10)
     if r.status_code != 200:
-        return JsonResponse({"error": "Pack not found"}, status=404)
+        return JsonResponse({"error": "Pack not found on Telegram"}, status=404)
     data = r.json()["result"]
     if data["title"] != sticker_pack.title:
         sticker_pack.title = data["title"]
@@ -259,10 +268,6 @@ def get_packs(request: WSGIRequest):
     return JsonResponse({
         "packs": pack_list
     }, status=200)
-
-
-# Reuse a single session to enable connection pooling
-session = requests.Session()
 
 
 @utils.panic_protected()
