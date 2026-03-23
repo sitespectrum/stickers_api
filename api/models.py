@@ -161,6 +161,7 @@ class S3File(models.Model):
     file = FileField(upload_to=upload_to)
     name = models.CharField(max_length=255)
     owner = models.ForeignKey(User, on_delete=models.CASCADE)
+    size = models.BigIntegerField(default=0)
 
     def __str__(self):
         return self.name
