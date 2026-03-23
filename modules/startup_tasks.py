@@ -20,7 +20,7 @@ def run_startup_tasks():
         )
 
     print("Calculating used storage... ", end="")
-    for i in UserData.objects.filter(used_storage=0):
-        i.used_storage = sum(x.file.size for x in S3File.objects.filter(owner=i.user))
+    for i in S3File.objects.filter(size=0):
+        i.size = i.file.size
         i.save()
     print("Done")
