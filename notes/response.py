@@ -21,6 +21,7 @@ def get_all_notes(request: WSGIRequest):
     return JsonResponse({"notes": [{
         "id": i.id,
         "name": i.name,
+        "content": i.content[:600] + "..." if len(i.content) > 600 else i.content,
     } for i in Note.objects.filter(owner=request.user)]})
 
 
