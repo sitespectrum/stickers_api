@@ -24,14 +24,14 @@ import uuid
 
 def check_for_bans(user_data, user_ip=None):
     now = timezone.now()
-    active = Q(lifted=False) & (Q(expires_at__gt=now) | Q(expires_at__isnull=True))
+    active = Q(user=user_data.user) & Q(lifted=False) & (Q(expires_at__gt=now) | Q(expires_at__isnull=True))
 
     if user_ip:
         query = active & Q(ip=user_ip)
     else:
         query = active
 
-    active_bans = user_data.bans.filter(query)
+    active_bans = Ban.objects.filter(query)
 
     if active_bans.exists():
         return JsonResponse({
@@ -255,12 +255,12 @@ def login(request: WSGIRequest):
             if failed_attempts >= PASSWORD_ATTEMPT_BAN_LIMIT:
                 system_user = User.objects.get(username="system")
                 ban = Ban.objects.create(
+                    user=user,
                     reason="Too many unsuccessful login attempts.",
                     expires_at=timezone.now() + timedelta(minutes=10),
                     banned_by=system_user,
                     ip=client_ip,
                 )
-                user_data.bans.add(ban)
                 user_data.login_failed_ips[client_ip] = 10
                 user_data.save()
             if failed_attempts >= PASSWORD_ATTEMPT_LIMIT:
