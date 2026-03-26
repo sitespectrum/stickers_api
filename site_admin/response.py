@@ -8,7 +8,7 @@ from django.core.handlers.wsgi import WSGIRequest
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
 from api import models
-from api.models import ErrorLog, UserData, ROLE_CHOICES, OAUTH_PROVIDERS
+from api.models import ErrorLog, UserData, ROLE_CHOICES, OAUTH_PROVIDERS, Ban
 from authenticate import wrappers
 from stickers_backend import utils
 from stickers_backend.settings import GIT_USERNAME, GIT_PASSWORD
@@ -275,8 +275,8 @@ def modify_user(request: WSGIRequest, user_id):
             "favourites": user_data.favourite_stickers.count(),
             "login_method": dict(OAUTH_PROVIDERS)[user_data.oauth_provider],
             "login_method_code": user_data.oauth_provider,
-            "total_bans": len(user_data.bans.all()),
-            "active_bans": len(user_data.bans.filter(Q(lifted=False) & (Q(expires_at__gt=timezone.now()) | Q(expires_at__isnull=True)))),
+            "total_bans": len(Ban.objects.filter(user=user_obj)),
+            "active_bans": len(Ban.objects.filter(Q(user=user_obj) & Q(lifted=False) & (Q(expires_at__gt=timezone.now()) | Q(expires_at__isnull=True)))),
         })
 
     try:
@@ -324,9 +324,9 @@ def bans(request: WSGIRequest, user_id):
         only_active = request.GET.get("active_only", "false").lower() == "true"
 
         now = timezone.now()
-        active_q = Q(lifted=False) & (Q(expires_at__gt=now) | Q(expires_at__isnull=True))
+        active_q = Q(user=user_data.user) & Q(lifted=False) & (Q(expires_at__gt=now) | Q(expires_at__isnull=True))
 
-        bans_qs = user_data.bans.filter(active_q) if only_active else user_data.bans.all()
+        bans_qs = Ban.objects.filter(active_q) if only_active else Ban.objects.filter(user=user_data.user)
 
         return JsonResponse({
             "status": "Ok",
@@ -379,12 +379,12 @@ def ban_user(request: WSGIRequest, user_id):
     except json.decoder.JSONDecodeError:
         return JsonResponse({"status": "Bad Request"}, status=400)
     if request.method == "DELETE":
-        if not user_data.bans.filter(id=body["ban_id"]).exists():
+        if not Ban.objects.filter(id=body["ban_id"]).exists():
             return JsonResponse({
                 "status": "Error",
                 "error": "Ban does not exists",
             }, status=404)
-        ban = user_data.bans.get(id=body["ban_id"])
+        ban = Ban.objects.get(id=body["ban_id"])
         if not ban.can_be_lifted:
             return JsonResponse({
                 "status": "Error",
@@ -407,7 +407,8 @@ def ban_user(request: WSGIRequest, user_id):
                 "status": "Error",
                 "error": "Expiry date must be in the future.",
             }, status=400)
-    user_data.bans.create(
+    Ban.objects.create(
+        user=user_data.user,
         reason=ban_reason,
         expires_at=expires_at_date,
         can_be_lifted=True,

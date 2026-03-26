@@ -102,9 +102,12 @@ def delete_stickers_on_pack_delete(sender, instance, **kwargs):
     # Delete the thumbnail if it exists
     if instance.thumbnail:
         instance.thumbnail.delete()
+    if instance.stickers:
+        instance.stickers.all().delete()
 
 
 class Ban(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
     reason = models.TextField(max_length=255)
     expires_at = models.DateTimeField(null=True, blank=True)
     can_be_lifted = models.BooleanField(default=False)
@@ -132,7 +135,6 @@ class UserData(models.Model):
     sticker_packs = ManyToManyField(to=StickerPack, blank=True)
     oauth_id = models.CharField(max_length=255, blank=True, null=True)
     oauth_provider = models.CharField(max_length=255, choices=OAUTH_PROVIDERS, default="builtin")
-    bans = ManyToManyField(to=Ban, blank=True)
     login_failed_ips = models.JSONField(default=dict)
     used_storage = models.BigIntegerField(default=0)
 
