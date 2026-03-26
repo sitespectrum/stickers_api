@@ -10,7 +10,6 @@ from django.db.models import ManyToManyField, SET_NULL, OneToOneField, FileField
 from django.db.models.signals import post_delete
 from django.dispatch import receiver
 
-
 # Create your models here.
 ROLE_CHOICES = (
     ("owner", "Owner"),
@@ -49,6 +48,7 @@ ERROR_SEVERITIES = (
     ("unknown", "Unknown")
 )
 
+
 def upload_to(instance, filename):
     ext = Path(filename).suffix
     return f"{uuid.uuid4()}{ext}"
@@ -85,7 +85,8 @@ class StickerPack(models.Model):
     name = models.CharField(max_length=255, unique=True)
     title = models.CharField(max_length=255)
     stickers = ManyToManyField(to=Sticker, related_name="packs")
-    thumbnail = OneToOneField(to=Sticker,related_name="thumbnail_for_pack", on_delete=models.SET_NULL, null=True, blank=True, default=None)
+    thumbnail = OneToOneField(to=Sticker, related_name="thumbnail_for_pack", on_delete=models.SET_NULL, null=True,
+                              blank=True, default=None)
 
     def __str__(self):
         return f"{self.title} ({self.name})"
@@ -110,6 +111,7 @@ class Ban(models.Model):
     lifted = models.BooleanField(default=False)
     lifted_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name="lifted_by")
     banned_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name="banned_by")
+    ip = models.CharField(max_length=255, blank=True, null=True, default=None)
 
 
 class OAUTHCode(models.Model):
