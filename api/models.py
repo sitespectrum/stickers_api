@@ -22,7 +22,7 @@ ROLE_CHOICES = (
 OAUTH_PROVIDERS = (
     ("discord", "Discord"),
     ("telegram", "Telegram"),
-    ("builtin", "Stickerß profile")
+    ("builtin", "ÆTHER profile")
 )
 
 FILE_TYPES = (
@@ -54,13 +54,38 @@ def upload_to(instance, filename):
     return f"{uuid.uuid4()}{ext}"
 
 
+
+class NoteTag(models.Model):
+    name = models.CharField(max_length=255)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "name": self.name
+        }
+
+
 class Note(models.Model):
     name = models.CharField(max_length=255)
     content = models.TextField()
     owner = models.ForeignKey(User, on_delete=models.CASCADE)
+    tags = models.ManyToManyField(to=NoteTag)
+    created_at = models.DateTimeField(auto_now_add=True)
+    edited_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
         return self.name
+    
+    def to_dict(self, truncate = False):
+        return {
+            "id": self.id,
+            "name": self.name,
+            "content": self.content[:600] if truncate else self.content,
+            "owner": self.owner.username,
+            "tags": [i.to_dict() for i in self.tags.all()],
+            "created_at": self.created_at.isoformat(),
+            "edited_at": self.edited_at.isoformat()
+        }
 
 
 class Bookmark(models.Model):
