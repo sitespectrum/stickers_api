@@ -1,15 +1,13 @@
 import json
 
 from django.core.handlers.wsgi import WSGIRequest
-from django.http import JsonResponse
+from django.http import HttpResponse, JsonResponse
 from django.views.decorators.http import require_http_methods, require_GET
 
 from api.models import Note
 
 from authenticate import wrappers
 from stickers_backend import utils
-
-# Create your views here.
 
 
 @utils.panic_protected()
@@ -47,10 +45,6 @@ def save_note(request: WSGIRequest, note_id):
     if note_id == 0:
         name = body.get("name") or ""
         content = body.get("content") or ""
-        # if not content:
-        #     return JsonResponse({"error": "No content"}, status=400)
-        # if not name:
-        #     name = content[:10] + "..." if len(content) > 13 else content
         Note.objects.create(name=name, content=content, owner=request.user)
         return JsonResponse({"status": "Success"}, status=201)
     if not Note.objects.filter(id=note_id, owner=request.user).exists():
@@ -58,10 +52,6 @@ def save_note(request: WSGIRequest, note_id):
     note = Note.objects.get(id=note_id)
     name = body.get("name") or ""
     content = body.get("content") or ""
-    # if not content:
-    #     return JsonResponse({"error": "No content"}, status=400)
-    # if not name:
-    #     name = content[:10] + "..." if len(content) > 13 else content
     note.name = name
     note.content = content
     note.save()
@@ -77,4 +67,4 @@ def delete_note(request: WSGIRequest, note_id):
     if not Note.objects.filter(id=note_id, owner=request.user).exists():
         return JsonResponse({"error": "Note not found"}, status=404)
     Note.objects.get(id=note_id).delete()
-    return JsonResponse(None, status=204)
+    return HttpResponse(status=204)
