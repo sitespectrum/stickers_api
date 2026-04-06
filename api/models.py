@@ -92,6 +92,17 @@ class Bookmark(models.Model):
     name = models.CharField(max_length=255)
     url = models.URLField()
     owner = models.ForeignKey(User, on_delete=models.CASCADE)
+    folder = models.ForeignKey("BookmarkFolder", on_delete=models.SET_NULL, null=True, blank=True, default=None)
+    page_title = models.CharField(max_length=512, blank=True, null=True, default=None)
+    cover_image_url = models.URLField(blank=True, null=True, default=None)
+
+    def __str__(self):
+        return self.name
+
+
+class BookmarkFolder(models.Model):
+    name = models.CharField(max_length=255)
+    owner = models.ForeignKey(User, on_delete=models.CASCADE)
 
     def __str__(self):
         return self.name
