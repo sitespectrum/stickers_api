@@ -201,10 +201,47 @@ class S3File(models.Model):
     file = FileField(upload_to=upload_to)
     name = models.CharField(max_length=255)
     owner = models.ForeignKey(User, on_delete=models.CASCADE)
+    folder = models.ForeignKey("S3Folder", on_delete=models.SET_NULL, null=True, blank=True, default=None)
     size = models.BigIntegerField(default=0)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["owner", "folder", "name"], name="unique_file_name_per_folder")
+        ]
 
     def __str__(self):
         return self.name
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "name": self.name,
+            "folder_id": self.folder_id,
+            "size": self.size,
+        }
+
+
+class S3Folder(models.Model):
+    name = models.CharField(max_length=255)
+    owner = models.ForeignKey(User, on_delete=models.CASCADE)
+    parent = models.ForeignKey("self", on_delete=models.CASCADE, null=True, blank=True, default=None, related_name="children")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["owner", "parent", "name"], name="unique_folder_name_per_parent")
+        ]
+
+    def __str__(self):
+        return self.name
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "name": self.name,
+            "parent_id": self.parent_id,
+            "created_at": self.created_at.isoformat(),
+        }
 
 
 class File(models.Model):
