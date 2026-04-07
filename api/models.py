@@ -203,6 +203,7 @@ class S3File(models.Model):
     owner = models.ForeignKey(User, on_delete=models.CASCADE)
     folder = models.ForeignKey("S3Folder", on_delete=models.SET_NULL, null=True, blank=True, default=None)
     size = models.BigIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         constraints = [
@@ -218,6 +219,7 @@ class S3File(models.Model):
             "name": self.name,
             "folder_id": self.folder_id,
             "size": self.size,
+            "created_at": self.created_at.isoformat(),
         }
 
 

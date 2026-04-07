@@ -268,8 +268,27 @@ def delete_folder(request: WSGIRequest, folder_id: int):
         folder = S3Folder.objects.get(id=folder_id, owner=request.user)
     except S3Folder.DoesNotExist:
         return JsonResponse({"error": "Folder not found"}, status=404)
-    if S3Folder.objects.filter(owner=request.user, parent=folder).exists() or S3File.objects.filter(owner=request.user, folder=folder).exists():
-        return JsonResponse({"error": "Folder not empty"}, status=400)
+
+    recursive_param = request.GET.get("recursive")
+    recursive = str(recursive_param).lower() in ("1", "true", "yes")
+
+    if not recursive:
+        if S3Folder.objects.filter(owner=request.user, parent=folder).exists() or S3File.objects.filter(owner=request.user, folder=folder).exists():
+            return JsonResponse({"error": "Folder not empty"}, status=400)
+        folder.delete()
+        return JsonResponse({"status": "Ok"}, status=204)
+
+    # Recursive delete: delete all files in this folder subtree, then delete the folder.
+    # Child folders are deleted via CASCADE on the parent relationship.
+    folders_to_delete = [folder]
+    idx = 0
+    while idx < len(folders_to_delete):
+        current = folders_to_delete[idx]
+        children = list(S3Folder.objects.filter(owner=request.user, parent=current))
+        folders_to_delete.extend(children)
+        idx += 1
+
+    S3File.objects.filter(owner=request.user, folder__in=folders_to_delete).delete()
     folder.delete()
     return JsonResponse({"status": "Ok"}, status=204)
 
