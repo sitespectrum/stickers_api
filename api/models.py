@@ -204,6 +204,7 @@ class S3File(models.Model):
     folder = models.ForeignKey("S3Folder", on_delete=models.SET_NULL, null=True, blank=True, default=None)
     size = models.BigIntegerField(default=0)
     created_at = models.DateTimeField(auto_now_add=True)
+    captured_at = models.DateTimeField(null=True, blank=True, default=None)
 
     class Meta:
         constraints = [
@@ -220,6 +221,7 @@ class S3File(models.Model):
             "folder_id": self.folder_id,
             "size": self.size,
             "created_at": self.created_at.isoformat(),
+            "captured_at": self.captured_at.isoformat() if self.captured_at is not None else None,
         }
 
 
