@@ -379,6 +379,35 @@ def list_folder(request: WSGIRequest):
 @utils.maintenance_protected()
 @wrappers.login_required()
 @require_GET
+def list_recent_files(request: WSGIRequest):
+    limit_raw = request.GET.get("limit")
+    limit = 24
+    if limit_raw is not None:
+        try:
+            limit = int(limit_raw)
+        except (TypeError, ValueError):
+            return JsonResponse({"error": "Invalid limit"}, status=400)
+
+    if limit < 1:
+        return JsonResponse({"error": "Invalid limit"}, status=400)
+    limit = min(limit, 200)
+
+    files_qs = (
+        S3File.objects.filter(owner=request.user)
+        .order_by("-created_at")
+    )
+
+    return JsonResponse({
+        "status": "Ok",
+        "files": [f.to_dict() for f in files_qs[:limit]],
+    })
+
+
+@utils.panic_protected()
+@utils.fallback_protected()
+@utils.maintenance_protected()
+@wrappers.login_required()
+@require_GET
 def get_all_folders(request: WSGIRequest):
     folders_qs = S3Folder.objects.filter(owner=request.user).order_by("name")
     return JsonResponse({

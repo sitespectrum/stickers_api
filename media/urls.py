@@ -11,6 +11,8 @@ urlpatterns = [
 
     path("list", response.list_folder, name="list_folder"),
 
+    path("recent", response.list_recent_files, name="list_recent_files"),
+
     path("library", response.list_media_library, name="list_media_library"),
 
     path("folders", response.get_all_folders, name="get_all_folders"),
