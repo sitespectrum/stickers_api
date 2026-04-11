@@ -22,7 +22,7 @@ ROLE_CHOICES = (
 OAUTH_PROVIDERS = (
     ("discord", "Discord"),
     ("telegram", "Telegram"),
-    ("builtin", "Stickerß profile")
+    ("builtin", "ÆTHER profile")
 )
 
 FILE_TYPES = (
@@ -54,18 +54,54 @@ def upload_to(instance, filename):
     return f"{uuid.uuid4()}{ext}"
 
 
+
+class NoteTag(models.Model):
+    name = models.CharField(max_length=255)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "name": self.name
+        }
+
+
 class Note(models.Model):
     name = models.CharField(max_length=255)
     content = models.TextField()
     owner = models.ForeignKey(User, on_delete=models.CASCADE)
+    tags = models.ManyToManyField(to=NoteTag)
+    created_at = models.DateTimeField(auto_now_add=True)
+    edited_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
         return self.name
+    
+    def to_dict(self, truncate = False):
+        return {
+            "id": self.id,
+            "name": self.name,
+            "content": self.content[:600] if truncate else self.content,
+            "owner": self.owner.username,
+            "tags": [i.to_dict() for i in self.tags.all()],
+            "created_at": self.created_at.isoformat(),
+            "edited_at": self.edited_at.isoformat()
+        }
 
 
 class Bookmark(models.Model):
     name = models.CharField(max_length=255)
     url = models.URLField()
+    owner = models.ForeignKey(User, on_delete=models.CASCADE)
+    folder = models.ForeignKey("BookmarkFolder", on_delete=models.SET_NULL, null=True, blank=True, default=None)
+    page_title = models.CharField(max_length=512, blank=True, null=True, default=None)
+    cover_image_url = models.URLField(blank=True, null=True, default=None)
+
+    def __str__(self):
+        return self.name
+
+
+class BookmarkFolder(models.Model):
+    name = models.CharField(max_length=255)
     owner = models.ForeignKey(User, on_delete=models.CASCADE)
 
     def __str__(self):
@@ -165,10 +201,51 @@ class S3File(models.Model):
     file = FileField(upload_to=upload_to)
     name = models.CharField(max_length=255)
     owner = models.ForeignKey(User, on_delete=models.CASCADE)
+    folder = models.ForeignKey("S3Folder", on_delete=models.SET_NULL, null=True, blank=True, default=None)
     size = models.BigIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+    captured_at = models.DateTimeField(null=True, blank=True, default=None)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["owner", "folder", "name"], name="unique_file_name_per_folder")
+        ]
 
     def __str__(self):
         return self.name
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "name": self.name,
+            "folder_id": self.folder_id,
+            "size": self.size,
+            "created_at": self.created_at.isoformat(),
+            "captured_at": self.captured_at.isoformat() if self.captured_at is not None else None,
+        }
+
+
+class S3Folder(models.Model):
+    name = models.CharField(max_length=255)
+    owner = models.ForeignKey(User, on_delete=models.CASCADE)
+    parent = models.ForeignKey("self", on_delete=models.CASCADE, null=True, blank=True, default=None, related_name="children")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["owner", "parent", "name"], name="unique_folder_name_per_parent")
+        ]
+
+    def __str__(self):
+        return self.name
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "name": self.name,
+            "parent_id": self.parent_id,
+            "created_at": self.created_at.isoformat(),
+        }
 
 
 class File(models.Model):

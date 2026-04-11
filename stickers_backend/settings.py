@@ -96,15 +96,16 @@ else:
 # CORS
 CORS_ALLOWED_ORIGINS = [
     "http://127.0.0.1:5173",   # frontend origin
+    "http://localhost:5173",   # frontend origin
     "https://subrectal-consanguineously-sammy.ngrok-free.app",
     "https://*.loca.lt",
     "https://oizqk-37-76-46-208.a.free.pinggy.link",
-    "https://stickerss.sitespectrum.dev",
+    "https://aether.sitespectrum.dev",
 ]
 CORS_ALLOW_CREDENTIALS = True
 # Application definition
 CSRF_TRUSTED_ORIGINS = [
-    "https://stickerss.sitespectrum.dev",
+    "https://aether.sitespectrum.dev",
 ]
 
 INSTALLED_APPS = [
