@@ -2,7 +2,7 @@ import json
 
 from django.core.handlers.wsgi import WSGIRequest
 from django.http import JsonResponse
-from django.views.decorators.http import require_http_methods, require_GET, require_POST
+from django.views.decorators.http import require_http_methods, require_GET
 
 from api.models import Note
 
@@ -21,6 +21,7 @@ def get_all_notes(request: WSGIRequest):
     return JsonResponse({"notes": [{
         "id": i.id,
         "name": i.name,
+        "content": i.content[:600] + "..." if len(i.content) > 600 else i.content,
     } for i in Note.objects.filter(owner=request.user)]})
 
 
@@ -45,7 +46,7 @@ def get_note_by_id(request: WSGIRequest, note_id):
 @utils.fallback_protected()
 @utils.maintenance_protected()
 @wrappers.login_required()
-@require_POST
+@require_http_methods(["PUT"])
 def save_note(request: WSGIRequest, note_id):
     try:
         body = json.loads(request.body)
@@ -59,7 +60,7 @@ def save_note(request: WSGIRequest, note_id):
         if not name:
             name = content[:10] + "..." if len(content) > 13 else content
         Note.objects.create(name=name, content=content, owner=request.user)
-        return JsonResponse({"status": "Success"}, status=200)
+        return JsonResponse({"status": "Success"}, status=201)
     if not Note.objects.filter(id=note_id, owner=request.user).exists():
         return JsonResponse({"error": "Note not found"}, status=404)
     note = Note.objects.get(id=note_id)
@@ -84,4 +85,4 @@ def delete_note(request: WSGIRequest, note_id):
     if not Note.objects.filter(id=note_id, owner=request.user).exists():
         return JsonResponse({"error": "Note not found"}, status=404)
     Note.objects.get(id=note_id).delete()
-    return JsonResponse({"status": "Success"}, status=200)
+    return JsonResponse({"status": "Success"}, status=204)

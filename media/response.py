@@ -10,6 +10,22 @@ from stickers_backend.settings import MAX_UPLOAD_SIZE, MAX_USER_STORAGE
 
 
 # Create your views here.
+@utils.panic_protected()
+@utils.fallback_protected()
+@utils.maintenance_protected()
+@wrappers.login_required()
+def get_file_metadata(request, file_name):
+    try:
+        file_obj = S3File.objects.get(name=file_name, owner=request.user)
+        file_size = file_obj.size
+    except S3File.DoesNotExist:
+        return JsonResponse({'error': 'Not Found'}, status=404)
+
+    return JsonResponse({
+        "status": "Ok",
+        "name": file_name,
+        "size": file_size,
+    })
 
 
 @utils.panic_protected()
@@ -40,7 +56,7 @@ def upload_file(request: WSGIRequest) -> JsonResponse:
                 'error': f'File {file.name} is too large',
             }, status=413)
         try:
-            if file.size + user_data.used_storage > MAX_USER_STORAGE*1024*1024:
+            if file.size + sum(i.size for i in S3File.objects.filter(owner=request.user)) > MAX_USER_STORAGE*1024*1024:
                 return JsonResponse({
                     'status': 'Error',
                     'error': f'You have reached your storage limit',
@@ -50,12 +66,12 @@ def upload_file(request: WSGIRequest) -> JsonResponse:
                     'status': 'Error',
                     'error': f'File {file.name} already exists',
                 }, status=400)
-            S3File.objects.create(name=file.name, owner=request.user, file=file)
-            user_data.refresh_from_db()
-            user_data.used_storage += file.size
-            if user_data.used_storage < 0:
-                user_data.used_storage = 0
-            user_data.save()
+            file_object = S3File.objects.create(name=file.name, owner=request.user, file=file)
+            file_object.file.save(file.name, file)
+            file_object.save()
+            file_object.refresh_from_db()
+            file_object.size = file.size
+            file_object.save()
         except IntegrityError:
             continue
 
@@ -73,7 +89,7 @@ def get_all_files(request: WSGIRequest):
             "id": i.id,
             "name": i.name,
         } for i in S3File.objects.filter(owner=request.user)],
-        "storage_used": UserData.objects.get(user=request.user).used_storage/1024/1024,
+        "storage_used": sum(i.size for i in S3File.objects.filter(owner=request.user))/1024/1024,
         "max_storage": MAX_USER_STORAGE,
     })
 
@@ -87,8 +103,5 @@ def delete_file(request: WSGIRequest, file_id):
     if not S3File.objects.filter(id=file_id, owner=request.user).exists():
         return JsonResponse({"error": "File not found"}, status=404)
     file_obj = S3File.objects.get(id=file_id)
-    user_data = UserData.objects.get(user=request.user)
-    user_data.used_storage -= file_obj.file.size
-    user_data.save()
     file_obj.delete()
-    return JsonResponse({"status": "Ok"}, status=200)
+    return JsonResponse({"status": "Ok"}, status=204)

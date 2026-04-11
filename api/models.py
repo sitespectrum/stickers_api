@@ -10,7 +10,6 @@ from django.db.models import ManyToManyField, SET_NULL, OneToOneField, FileField
 from django.db.models.signals import post_delete
 from django.dispatch import receiver
 
-
 # Create your models here.
 ROLE_CHOICES = (
     ("owner", "Owner"),
@@ -49,6 +48,7 @@ ERROR_SEVERITIES = (
     ("unknown", "Unknown")
 )
 
+
 def upload_to(instance, filename):
     ext = Path(filename).suffix
     return f"{uuid.uuid4()}{ext}"
@@ -85,7 +85,8 @@ class StickerPack(models.Model):
     name = models.CharField(max_length=255, unique=True)
     title = models.CharField(max_length=255)
     stickers = ManyToManyField(to=Sticker, related_name="packs")
-    thumbnail = OneToOneField(to=Sticker,related_name="thumbnail_for_pack", on_delete=models.SET_NULL, null=True, blank=True, default=None)
+    thumbnail = OneToOneField(to=Sticker, related_name="thumbnail_for_pack", on_delete=models.SET_NULL, null=True,
+                              blank=True, default=None)
 
     def __str__(self):
         return f"{self.title} ({self.name})"
@@ -101,15 +102,19 @@ def delete_stickers_on_pack_delete(sender, instance, **kwargs):
     # Delete the thumbnail if it exists
     if instance.thumbnail:
         instance.thumbnail.delete()
+    if instance.stickers:
+        instance.stickers.all().delete()
 
 
 class Ban(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
     reason = models.TextField(max_length=255)
     expires_at = models.DateTimeField(null=True, blank=True)
     can_be_lifted = models.BooleanField(default=False)
     lifted = models.BooleanField(default=False)
     lifted_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name="lifted_by")
     banned_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name="banned_by")
+    ip = models.CharField(max_length=255, blank=True, null=True, default=None)
 
 
 class OAUTHCode(models.Model):
@@ -125,12 +130,11 @@ class UserData(models.Model):
     role = models.CharField(max_length=255, choices=ROLE_CHOICES, default="user")
     unsuccessful_attempts = models.IntegerField(default=0)
     is_locked = models.BooleanField(default=False)
-    pfp_link = models.CharField(max_length=255, default="/person-fill.svg")
+    pfp_link = models.CharField(max_length=255, default="", null=True, blank=True)
     favourite_stickers = ManyToManyField(to=Sticker, blank=True)
     sticker_packs = ManyToManyField(to=StickerPack, blank=True)
     oauth_id = models.CharField(max_length=255, blank=True, null=True)
     oauth_provider = models.CharField(max_length=255, choices=OAUTH_PROVIDERS, default="builtin")
-    bans = ManyToManyField(to=Ban, blank=True)
     login_failed_ips = models.JSONField(default=dict)
     used_storage = models.BigIntegerField(default=0)
 
@@ -161,6 +165,7 @@ class S3File(models.Model):
     file = FileField(upload_to=upload_to)
     name = models.CharField(max_length=255)
     owner = models.ForeignKey(User, on_delete=models.CASCADE)
+    size = models.BigIntegerField(default=0)
 
     def __str__(self):
         return self.name

@@ -22,21 +22,36 @@ from authenticate import wrappers
 import uuid
 
 
-def check_for_bans(user_data):
-    if user_data.bans.filter(Q(lifted=False) & (Q(expires_at__gt=timezone.now()) | Q(expires_at__isnull=True))).exists():
+def check_for_bans(user_data, user_ip=None):
+    now = timezone.now()
+    active = Q(user=user_data.user) & Q(lifted=False) & (Q(expires_at__gt=now) | Q(expires_at__isnull=True))
+
+    if user_ip:
+        query = active & Q(ip=user_ip)
+    else:
+        query = active
+
+    active_bans = Ban.objects.filter(query)
+
+    if active_bans.exists():
         return JsonResponse({
             "reason": "banned",
             "error": "You are currently banned.",
             "bans": [
                 {
-                    "id": i.id,
-                    "reason": i.reason,
-                    "expires_at": i.expires_at,
-                    "is_active": (not i.lifted) and (i.expires_at is None or i.expires_at > timezone.now()),
-                    "banned_by": UserData.objects.get(user=i.banned_by).display_name or ("@" + i.banned_by.username) if i.banned_by else "Deleted user",
-                } for i in user_data.bans.filter(Q(lifted=False) & (Q(expires_at__gt=timezone.now()) | Q(expires_at__isnull=True)))
+                    "id": ban.id,
+                    "reason": ban.reason,
+                    "expires_at": ban.expires_at,
+                    "is_active": (not ban.lifted) and (ban.expires_at is None or ban.expires_at > now),
+                    "banned_by": (
+                        UserData.objects.get(user=ban.banned_by).display_name
+                        or ("@" + ban.banned_by.username)
+                    ) if ban.banned_by else "Deleted user",
+                }
+                for ban in active_bans
             ]
         }, status=403)
+
     return None
 
 
@@ -52,11 +67,11 @@ def validate_oauth_code(request: WSGIRequest):
 
     OAUTHCode.objects.filter(expires_at__lt=timezone.now()).delete()
     if not OAUTHCode.objects.filter(code=body.get("code")).exists():
-        return JsonResponse({"error": "Invalid code"}, status=400)
+        return JsonResponse({"error": "Invalid code"}, status=401)
 
     code_obj = OAUTHCode.objects.get(code=body.get("code"))
     if code_obj.challenge != hashlib.sha256(str(body.get("code_verifier")).encode("utf-8")).hexdigest():
-        return JsonResponse({"error": "Invalid code verifier"}, status=400)
+        return JsonResponse({"error": "Invalid code verifier"}, status=401)
 
     auth_login(request, code_obj.user)
     code_obj.delete()
@@ -87,7 +102,7 @@ def get_oauth_code(request: WSGIRequest):
         expires_at=timezone.now() + timedelta(minutes=10)
     )
 
-    return JsonResponse({"status": "Ok", "code": oauth_code}, status=200)
+    return JsonResponse({"status": "Ok", "code": oauth_code}, status=201)
 
 
 @require_http_methods(["POST"])
@@ -118,7 +133,7 @@ def discord_callback(request):
             headers={"Authorization": f"Bearer {token['access_token']}"}
         ).json()
     except KeyError:
-        return JsonResponse({"error": "Unable to login"}, status=400)
+        return JsonResponse({"error": "Unable to login"}, status=500)
 
     if UserData.objects.filter(oauth_id=user_info["id"], oauth_provider="discord").exists():
         user_data = UserData.objects.get(oauth_id=user_info["id"], oauth_provider="discord")
@@ -200,14 +215,14 @@ def login(request: WSGIRequest):
             )
             user_data.save()
             auth_login(request, user)
-            return JsonResponse({"status": "Ok"}, status=200)
+            return JsonResponse({"status": "Ok"}, status=201)
 
     user = authenticate(request, username=body.get("username"), password=body.get("password"))
     if user is not None:
         user_data = UserData.objects.get(user=user)
         if user_data.role == "system":
             return JsonResponse({"error": "This is a system managed account"}, status=403)
-        bans = check_for_bans(user_data)
+        bans = check_for_bans(user_data, user_ip=utils.get_client_ip(request))
         if bans:
             return bans
         if user_data.is_locked:
@@ -223,7 +238,7 @@ def login(request: WSGIRequest):
             user_data = UserData.objects.get(user=user)
             if user_data.role == "system":
                 return JsonResponse({"error": "This is a system managed account"}, status=403)
-            bans = check_for_bans(user_data)
+            bans = check_for_bans(user_data, user_ip=utils.get_client_ip(request))
             if bans:
                 return bans
             user_data.unsuccessful_attempts += 1
@@ -240,18 +255,19 @@ def login(request: WSGIRequest):
             if failed_attempts >= PASSWORD_ATTEMPT_BAN_LIMIT:
                 system_user = User.objects.get(username="system")
                 ban = Ban.objects.create(
+                    user=user,
                     reason="Too many unsuccessful login attempts.",
                     expires_at=timezone.now() + timedelta(minutes=10),
                     banned_by=system_user,
+                    ip=client_ip,
                 )
-                user_data.bans.add(ban)
                 user_data.login_failed_ips[client_ip] = 10
                 user_data.save()
             if failed_attempts >= PASSWORD_ATTEMPT_LIMIT:
                 time.sleep(failed_attempts)
         except User.DoesNotExist:
             pass
-        return JsonResponse({"error": "Invalid username or password"}, status=403)
+        return JsonResponse({"error": "Invalid username or password"}, status=401)
 
 
 @require_http_methods(["GET"])
@@ -306,13 +322,13 @@ def register(request: WSGIRequest):
 
     auth_login(request, new_user)
 
-    return JsonResponse({"status": "Ok"}, status=200)
+    return JsonResponse({"status": "Ok"}, status=201)
 
 
 @utils.panic_protected()
 @utils.safe_protected()
 @utils.fallback_protected()
-@require_http_methods(["POST"])
+@require_http_methods(["PATCH"])
 @wrappers.login_required()
 def change_email(request: WSGIRequest):
     try:
@@ -335,7 +351,7 @@ def change_email(request: WSGIRequest):
 @utils.panic_protected()
 @utils.safe_protected()
 @utils.fallback_protected()
-@require_http_methods(["POST"])
+@require_http_methods(["PATCH"])
 @wrappers.login_required()
 def change_password(request: WSGIRequest):
     try:
@@ -356,7 +372,7 @@ def change_password(request: WSGIRequest):
 @utils.panic_protected()
 @utils.safe_protected()
 @utils.fallback_protected()
-@require_http_methods(["POST"])
+@require_http_methods(["PATCH"])
 @wrappers.login_required()
 def change_display_name(request: WSGIRequest):
     try:
@@ -376,7 +392,7 @@ def change_display_name(request: WSGIRequest):
 @utils.panic_protected()
 @utils.safe_protected()
 @utils.fallback_protected()
-@require_http_methods(["POST"])
+@require_http_methods(["PATCH"])
 @wrappers.login_required()
 def update_profile(request: WSGIRequest):
     try:
