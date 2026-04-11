@@ -305,6 +305,8 @@ def register(request: WSGIRequest):
         return JsonResponse({"error": "Password is required"}, status=400)
     if not body.get("email"):
         return JsonResponse({"error": "Email is required"}, status=400)
+    if User.objects.filter(email=body.get("email")).exists():
+        return JsonResponse({"error": "User with this email already exists"}, status=409)
     try:
         new_user = User.objects.create_user(
             username=body.get("username"),
