@@ -15,6 +15,8 @@ RUN apt-get update \
         zlib1g-dev \
     && rm -rf /var/lib/apt/lists/*
 
+RUN mkdir -p /app/data
+
 COPY pyproject.toml uv.lock ./
 
 RUN pip install --no-cache-dir uv \
