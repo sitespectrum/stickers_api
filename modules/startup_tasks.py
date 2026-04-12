@@ -5,7 +5,7 @@ from api.models import UserData, S3File
 
 
 def run_startup_tasks():
-    call_command('makemigrations')
+    call_command('makemigrations', 'api')
     call_command('migrate')
 
     if not User.objects.filter(username='system').exists():
