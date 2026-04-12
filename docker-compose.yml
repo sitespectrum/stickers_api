@@ -1,0 +1,30 @@
+services:
+  stickers_api:
+    build:
+      context: .
+    environment:
+      PORT: "8000"
+      DJANGO_SECRET: "${DJANGO_SECRET}"
+      DEBUG: "${DEBUG:-0}"
+      PASSWORD_ATTEMPT_LIMIT: "${PASSWORD_ATTEMPT_LIMIT}"
+      PASSWORD_ATTEMPT_BAN_LIMIT: "${PASSWORD_ATTEMPT_BAN_LIMIT}"
+      TURNSTILE_SECRET: "${TURNSTILE_SECRET}"
+      TELEGRAM_TOKEN: "${TELEGRAM_TOKEN}"
+      RESEND_API_KEY: "${RESEND_API_KEY}"
+      DISCORD_KEY: "${DISCORD_KEY}"
+      DISCORD_CLIENT_ID: "${DISCORD_CLIENT_ID}"
+      DISCORD_CALLBACK: "${DISCORD_CALLBACK}"
+      MAX_UPLOAD_SIZE: "${MAX_UPLOAD_SIZE}"
+      MAX_USER_STORAGE: "${MAX_USER_STORAGE}"
+      AWS_ACCESS_KEY_ID: "${AWS_ACCESS_KEY_ID}"
+      AWS_SECRET_ACCESS_KEY: "${AWS_SECRET_ACCESS_KEY}"
+      AWS_STORAGE_BUCKET_NAME: "${AWS_STORAGE_BUCKET_NAME}"
+      AWS_S3_ENDPOINT_URL: "${AWS_S3_ENDPOINT_URL}"
+    ports:
+      - "8000:8000"
+    volumes:
+      - sqlite_data:/app/db.sqlite3
+    restart: unless-stopped
+
+volumes:
+  sqlite_data:
