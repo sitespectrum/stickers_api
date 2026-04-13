@@ -168,6 +168,8 @@ def discord_callback(request):
         role="user"
     )
 
+    auth_login(request, user)
+
     return JsonResponse({"status": "Ok"}, status=200)
 
 
