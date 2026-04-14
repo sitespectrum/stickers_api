@@ -28,7 +28,7 @@ def get_all_notes(request: WSGIRequest):
     if tags_raw:
         tag_names = [t.strip() for t in tags_raw.split(",") if t.strip()]
         if tag_names:
-            notes = notes.filter(tags__name__in=tag_names).distinct()
+            notes = notes.filter(tags__name__in=tag_names, tags__owner=request.user).distinct()
 
     return JsonResponse({"notes": [i.to_dict(truncate=True) for i in notes]})
 
@@ -70,7 +70,7 @@ def save_note(request: WSGIRequest, note_id):
                 elif isinstance(t, dict) and isinstance(t.get("id"), int):
                     tag_ids.append(t.get("id"))
             if tag_ids:
-                note.tags.set(NoteTag.objects.filter(id__in=tag_ids))
+                note.tags.set(NoteTag.objects.filter(id__in=tag_ids, owner=request.user))
 
         return JsonResponse({"status": "Success"}, status=201)
     if not Note.objects.filter(id=note_id, owner=request.user).exists():
@@ -90,7 +90,7 @@ def save_note(request: WSGIRequest, note_id):
                 tag_ids.append(t)
             elif isinstance(t, dict) and isinstance(t.get("id"), int):
                 tag_ids.append(t.get("id"))
-        note.tags.set(NoteTag.objects.filter(id__in=tag_ids))
+        note.tags.set(NoteTag.objects.filter(id__in=tag_ids, owner=request.user))
 
     return JsonResponse({"status": "Success"}, status=200)
 
@@ -114,7 +114,7 @@ def delete_note(request: WSGIRequest, note_id):
 @require_GET
 def get_all_note_tags(request: WSGIRequest):
     return JsonResponse({
-        "tags": [i.to_dict() for i in NoteTag.objects.all().order_by("name")]
+        "tags": [i.to_dict() for i in NoteTag.objects.filter(owner=request.user).order_by("name")]
     })
 
 
@@ -134,17 +134,17 @@ def save_note_tag(request: WSGIRequest, tag_id):
         return JsonResponse({"error": "Invalid name"}, status=400)
 
     if tag_id == 0:
-        if NoteTag.objects.filter(name__iexact=name).exists():
-            tag = NoteTag.objects.get(name__iexact=name)
+        if NoteTag.objects.filter(owner=request.user, name__iexact=name).exists():
+            tag = NoteTag.objects.get(owner=request.user, name__iexact=name)
             return JsonResponse({"tag": tag.to_dict()}, status=200)
 
-        tag = NoteTag.objects.create(name=name)
+        tag = NoteTag.objects.create(name=name, owner=request.user)
         return JsonResponse({"tag": tag.to_dict()}, status=201)
 
-    if not NoteTag.objects.filter(id=tag_id).exists():
+    if not NoteTag.objects.filter(id=tag_id, owner=request.user).exists():
         return JsonResponse({"error": "Tag not found"}, status=404)
 
-    tag = NoteTag.objects.get(id=tag_id)
+    tag = NoteTag.objects.get(id=tag_id, owner=request.user)
     tag.name = name
     tag.save()
     return JsonResponse({"tag": tag.to_dict()}, status=200)

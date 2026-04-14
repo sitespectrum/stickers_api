@@ -57,6 +57,10 @@ def upload_to(instance, filename):
 
 class NoteTag(models.Model):
     name = models.CharField(max_length=255)
+    owner = models.ForeignKey(User, on_delete=models.CASCADE, null=True, blank=True)
+
+    class Meta:
+        unique_together = ("owner", "name")
 
     def to_dict(self):
         return {
