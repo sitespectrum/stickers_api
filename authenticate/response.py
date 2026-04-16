@@ -20,6 +20,16 @@ from django.contrib.auth.models import User
 from django.utils import timezone
 from authenticate import wrappers
 import uuid
+import re
+
+
+def is_alphanumeric(s: str) -> bool:
+    return bool(re.fullmatch(r"[A-Za-z0-9]+", s))
+
+
+def is_valid_email(s: str) -> bool:
+    pattern = r"^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$"
+    return bool(re.fullmatch(pattern, s))
 
 
 def check_for_bans(user_data, user_ip=None):
@@ -309,6 +319,10 @@ def register(request: WSGIRequest):
         return JsonResponse({"error": "Email is required"}, status=400)
     if User.objects.filter(email=body.get("email")).exists():
         return JsonResponse({"error": "User with this email already exists"}, status=409)
+    if not is_alphanumeric(body.get("username")):
+        return JsonResponse({"error": "Username must be alphanumeric"}, status=400)
+    if not is_valid_email(body.get("email")):
+        return JsonResponse({"error": "Invalid email address"}, status=400)
     try:
         new_user = User.objects.create_user(
             username=body.get("username"),
@@ -340,13 +354,19 @@ def change_email(request: WSGIRequest):
     except JSONDecodeError:
         return JsonResponse({"error": "Invalid request body"}, status=400)
 
-    if not data["email"]:
+    if not data.get("email"):
         return JsonResponse({
             "status": "Error",
             "error": "Invalid email address",
         }, status=400)
 
-    request.user.email = data["email"]
+    if not is_valid_email(data.get("email")):
+        return JsonResponse({
+            "status": "Error",
+            "error": "Invalid email address",
+        }, status=400)
+
+    request.user.email = data.get("email")
     request.user.save()
 
     return JsonResponse({"status": "Ok"}, status=200)
@@ -368,6 +388,7 @@ def change_password(request: WSGIRequest):
     request.user.set_password(data["password"])
     request.user.save()
 
+    # noinspection PyTypeChecker
     auth_login(request, request.user)
 
     return JsonResponse({"status": "Ok"}, status=200)
@@ -408,12 +429,18 @@ def update_profile(request: WSGIRequest):
     if "password" in data.keys():
         request.user.set_password(data["password"])
         request.user.save()
+        # noinspection PyTypeChecker
         auth_login(request, request.user)
     if "display_name" in data.keys():
         user_data.display_name = data["display_name"]
     if "pfp_link" in data.keys():
         user_data.pfp_link = data["pfp_link"]
     if "email" in data.keys():
+        if not is_valid_email(data.get("email")):
+            return JsonResponse({
+                "status": "Error",
+                "error": "Invalid email address",
+            }, status=400)
         request.user.email = data["email"]
         request.user.save()
     user_data.save()

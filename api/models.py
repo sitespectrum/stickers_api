@@ -175,7 +175,7 @@ class UserData(models.Model):
     sticker_packs = ManyToManyField(to=StickerPack, blank=True)
     oauth_id = models.CharField(max_length=255, blank=True, null=True)
     oauth_provider = models.CharField(max_length=255, choices=OAUTH_PROVIDERS, default="builtin")
-    login_failed_ips = models.JSONField(default=dict)
+    login_failed_ips = models.JSONField(default=dict, blank=True)
     used_storage = models.BigIntegerField(default=0)
 
     def __str__(self):
